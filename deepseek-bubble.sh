@@ -7,11 +7,82 @@ set -u
 # ║  • A tiny draggable bubble floats over every app.                        ║
 # ║  • Tap it to open a panel: clipboard quick-actions + an agentic chat     ║
 # ║    where the model can run shell commands on the device (run_bash).      ║
-# ║  • First run asks for a DeepSeek API key and stores it privately.        ║
+# ║  • Multi-provider: DeepSeek (default), OpenAI, Gemini, Claude, Ollama…   ║
+# ║  • First run asks for your own API key and stores it privately.          ║
 # ║                                                                          ║
 # ║  Needs: the "Display over other apps" permission for Termux:GUI,         ║
 # ║         and `curl` + `jq` (both standard in Termux).                     ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
+
+# ── CLI flags ────────────────────────────────────────────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+CLI_PROVIDER=""; CLI_MODEL=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --provider) CLI_PROVIDER="${2:-}"; shift 2 ;;
+        --model)    CLI_MODEL="${2:-}"; shift 2 ;;
+        --update)
+            if [ -d "$SCRIPT_DIR/.git" ]; then
+                git -C "$SCRIPT_DIR" pull --ff-only && echo "Updated."
+            else
+                echo "Not a git checkout: $SCRIPT_DIR" >&2
+            fi
+            exit 0 ;;
+        -h|--help)
+            cat <<'HELP'
+Usage: deepseek-bubble.sh [--provider NAME] [--model ID] [--update]
+Providers: deepseek (default) openai gemini claude openrouter groq ollama custom
+Keys (env or ~/.config/deepseek-bubble/config):
+  DEEPSEEK_API_KEY OPENAI_API_KEY GEMINI_API_KEY ANTHROPIC_API_KEY
+  OPENROUTER_API_KEY GROQ_API_KEY   (ollama needs no key)
+Other env: AI_PROVIDER AI_MODEL AI_BASE_URL (full chat/completions URL, for "custom")
+HELP
+            exit 0 ;;
+        *) echo "Unknown option: $1 (try --help)" >&2; exit 1 ;;
+    esac
+done
+
+# ── Provider presets (all speak the OpenAI chat/completions dialect) ─────────
+KNOWN_PROVIDERS="deepseek openai gemini claude openrouter groq ollama custom"
+provider_url() {
+    case "$1" in
+        deepseek)   echo "https://api.deepseek.com/chat/completions" ;;
+        openai)     echo "https://api.openai.com/v1/chat/completions" ;;
+        gemini)     echo "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions" ;;
+        claude)     echo "https://api.anthropic.com/v1/chat/completions" ;;
+        openrouter) echo "https://openrouter.ai/api/v1/chat/completions" ;;
+        groq)       echo "https://api.groq.com/openai/v1/chat/completions" ;;
+        ollama)     echo "${OLLAMA_HOST:-http://localhost:11434}/v1/chat/completions" ;;
+        *)          echo "${AI_BASE_URL:-}" ;;
+    esac
+}
+provider_model() {
+    case "$1" in
+        deepseek)   echo "deepseek-flash" ;;
+        openai)     echo "gpt-4o-mini" ;;
+        gemini)     echo "gemini-2.5-flash" ;;
+        claude)     echo "claude-sonnet-5-5" ;;
+        openrouter) echo "openrouter/auto" ;;
+        groq)       echo "llama-3.3-70b-versatile" ;;
+        ollama)     echo "qwen2.5:3b" ;;
+        *)          echo "${AI_MODEL:-}" ;;
+    esac
+}
+provider_label() {
+    case "$1" in
+        deepseek) echo "DeepSeek" ;; openai) echo "OpenAI" ;; gemini) echo "Gemini" ;;
+        claude) echo "Claude" ;; openrouter) echo "OpenRouter" ;; groq) echo "Groq" ;;
+        ollama) echo "Ollama" ;; *) echo "Custom AI" ;;
+    esac
+}
+provider_keyvar() {   # name of the variable holding this provider's key
+    case "$1" in
+        deepseek) echo DEEPSEEK_API_KEY ;; openai) echo OPENAI_API_KEY ;;
+        gemini) echo GEMINI_API_KEY ;; claude) echo ANTHROPIC_API_KEY ;;
+        openrouter) echo OPENROUTER_API_KEY ;; groq) echo GROQ_API_KEY ;;
+        ollama) echo OLLAMA_API_KEY ;; *) echo AI_API_KEY ;;
+    esac
+}
 
 # ── Configuration ────────────────────────────────────────────────────────────
 CONFIG_DIR="$HOME/.config/deepseek-bubble"
@@ -52,41 +123,100 @@ TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/deepseek-bubble.XXXXXX")" || exit 1
 # behaviour and add our temp cleanup on top.
 trap 'rm -rf "$TMP_DIR" >/dev/null 2>&1; set +u; kill -9 $tg__main_PID >/dev/null 2>&1; kill -9 $tg__event_PID >/dev/null 2>&1' EXIT
 
+PROVIDER="${AI_PROVIDER:-deepseek}"
 API_URL="$DEFAULT_API_URL"
-DEEPSEEK_MODEL="$DEFAULT_MODEL"
+DEEPSEEK_MODEL="$DEFAULT_MODEL"      # name kept for compatibility: it is the active model id
 MAX_TOKENS="$DEFAULT_MAX_TOKENS"
 THINKING="$DEFAULT_THINKING"
 CONFIRM_DANGEROUS="$DEFAULT_CONFIRM_DANGEROUS"
-API_KEY="${DEEPSEEK_API_KEY:-}"
+API_KEY=""
+# one key slot per provider, so switching never loses a key
+declare -A KEYS=()
+declare -A MODELS=()
+CUSTOM_URL="${AI_BASE_URL:-}"
 HIST_FILE="$CONFIG_DIR/history.json"
 CMD_LOG="$CONFIG_DIR/cmd.log"
 
 load_config() {
-    [ -f "$CONFIG_FILE" ] || return
-    # split on the FIRST '=' only, keeping any '=' inside the value
-    local line v
-    while IFS= read -r line || [ -n "$line" ]; do
-        case "$line" in
-            DEEPSEEK_API_KEY=*)  v="${line#*=}"; [ -z "${DEEPSEEK_API_KEY:-}" ] && [ -n "$v" ] && API_KEY="$v" ;;
-            DEEPSEEK_MODEL=*)    v="${line#*=}"; [ -n "$v" ] && DEEPSEEK_MODEL="$v" ;;
-            DEEPSEEK_API_URL=*)  v="${line#*=}"; [ -n "$v" ] && API_URL="$v" ;;
-            DEEPSEEK_MAX_TOKENS=*) v="${line#*=}"; [ -n "$v" ] && MAX_TOKENS="$v" ;;
-            DEEPSEEK_THINKING=*) v="${line#*=}"; [ -n "$v" ] && THINKING="$v" ;;
-            BASH_CONFIRM=*)      v="${line#*=}"; [ -n "$v" ] && CONFIRM_DANGEROUS="$v" ;;
-        esac
-    done < "$CONFIG_FILE"
+    local line v k cfg_provider="" cfg_model="" cfg_url="" kv
+    if [ -f "$CONFIG_FILE" ]; then
+        # split on the FIRST '=' only, keeping any '=' inside the value
+        while IFS= read -r line || [ -n "$line" ]; do
+            v="${line#*=}"
+            case "$line" in
+                AI_PROVIDER=*)         cfg_provider="$v" ;;
+                AI_MODEL=*)            cfg_model="$v" ;;
+                AI_BASE_URL=*)         CUSTOM_URL="${CUSTOM_URL:-$v}" ;;
+                DEEPSEEK_MODEL=*)      [ -n "$v" ] && MODELS[deepseek]="$v" ;;
+                DEEPSEEK_API_URL=*)    cfg_url="$v" ;;
+                DEEPSEEK_MAX_TOKENS=*) [ -n "$v" ] && MAX_TOKENS="$v" ;;
+                DEEPSEEK_THINKING=*)   [ -n "$v" ] && THINKING="$v" ;;
+                BASH_CONFIRM=*)        [ -n "$v" ] && CONFIRM_DANGEROUS="$v" ;;
+                MODEL_*=*)             k="${line%%=*}"; k="${k#MODEL_}"; [ -n "$v" ] && MODELS[$k]="$v" ;;
+                *_API_KEY=*)           k="${line%%=*}"; [ -n "$v" ] && KEYS[$k]="$v" ;;
+            esac
+        done < "$CONFIG_FILE"
+    fi
+    # environment wins over the file (standard variable names per provider)
+    for k in $KNOWN_PROVIDERS; do
+        kv="$(provider_keyvar "$k")"
+        [ -n "${!kv:-}" ] && KEYS[$kv]="${!kv}"
+    done
+    [ -z "${AI_PROVIDER:-}" ] && [ -n "$cfg_provider" ] && PROVIDER="$cfg_provider"
+    [ -n "$CLI_PROVIDER" ] && PROVIDER="$CLI_PROVIDER"
+    case " $KNOWN_PROVIDERS " in *" $PROVIDER "*) ;; *) PROVIDER=deepseek ;; esac
+    activate_provider "$PROVIDER"
+    # explicit model overrides: --model > AI_MODEL env > config AI_MODEL (only for the saved provider)
+    if   [ -n "$CLI_MODEL" ];       then DEEPSEEK_MODEL="$CLI_MODEL"
+    elif [ -n "${AI_MODEL:-}" ];    then DEEPSEEK_MODEL="$AI_MODEL"
+    elif [ -n "$cfg_model" ] && [ "$PROVIDER" = "$cfg_provider" ]; then DEEPSEEK_MODEL="$cfg_model"
+    fi
+    # legacy DEEPSEEK_API_URL only applies to deepseek
+    [ "$PROVIDER" = deepseek ] && [ -n "$cfg_url" ] && API_URL="$cfg_url"
+}
+
+# point API_URL / API_KEY / model at the given provider
+activate_provider() {
+    local p="$1" kv
+    PROVIDER="$p"
+    API_URL="$(provider_url "$p")"
+    [ "$p" = custom ] && [ -n "$CUSTOM_URL" ] && API_URL="$CUSTOM_URL"
+    DEEPSEEK_MODEL="${MODELS[$p]:-$(provider_model "$p")}"
+    kv="$(provider_keyvar "$p")"
+    API_KEY="${KEYS[$kv]:-}"
+    # Ollama runs locally and needs no key; the header just has to be non-empty
+    [ "$p" = ollama ] && [ -z "$API_KEY" ] && API_KEY="ollama"
+    # the OpenAI API wants max_completion_tokens; everyone else still takes max_tokens
+    if [ "$p" = openai ]; then TOKEN_FIELD="max_completion_tokens"; else TOKEN_FIELD="max_tokens"; fi
 }
 
 save_config() {
+    local k kv m
+    MODELS[$PROVIDER]="$DEEPSEEK_MODEL"
+    KEYS[$(provider_keyvar "$PROVIDER")]="$API_KEY"
     mkdir -p "$CONFIG_DIR"
     chmod 700 "$CONFIG_DIR" 2>/dev/null
-    ( umask 077; printf 'DEEPSEEK_API_KEY=%s\nDEEPSEEK_MODEL=%s\nDEEPSEEK_API_URL=%s\nDEEPSEEK_MAX_TOKENS=%s\nDEEPSEEK_THINKING=%s\nBASH_CONFIRM=%s\n' \
-        "$API_KEY" "$DEEPSEEK_MODEL" "$API_URL" "$MAX_TOKENS" "$THINKING" "$CONFIRM_DANGEROUS" > "$CONFIG_FILE" )
+    (
+        umask 077
+        {
+            printf 'AI_PROVIDER=%s\n' "$PROVIDER"
+            printf 'AI_BASE_URL=%s\n' "$CUSTOM_URL"
+            printf 'DEEPSEEK_MAX_TOKENS=%s\nDEEPSEEK_THINKING=%s\nBASH_CONFIRM=%s\n' \
+                "$MAX_TOKENS" "$THINKING" "$CONFIRM_DANGEROUS"
+            for k in $KNOWN_PROVIDERS; do
+                kv="$(provider_keyvar "$k")"
+                [ -n "${KEYS[$kv]:-}" ] && [ "${KEYS[$kv]}" != ollama ] && printf '%s=%s\n' "$kv" "${KEYS[$kv]}"
+                m="${MODELS[$k]:-}"
+                [ -n "$m" ] && printf 'MODEL_%s=%s\n' "$k" "$m"
+            done
+        } > "$CONFIG_FILE"
+    )
     chmod 600 "$CONFIG_FILE" 2>/dev/null
 }
 
 load_config
 case "$MAX_TOKENS" in ''|*[!0-9]*) MAX_TOKENS="$DEFAULT_MAX_TOKENS" ;; esac
+PROVIDER_LABEL="$(provider_label "$PROVIDER")"
 
 # ── Small helpers ────────────────────────────────────────────────────────────
 toast() { termux-toast -g top "$1" >/dev/null 2>&1 & }
@@ -120,7 +250,7 @@ busy_pump() {   # handle any queued UI events while an API call / command runs
 busy_begin() { BUSY=1; CANCEL=0; tg_view_text "$aid" "$send_btn" "Stop"; }
 busy_end()   { BUSY=0; CANCEL=0; tg_view_text "$aid" "$send_btn" "Send"; }
 
-# ── DeepSeek API ─────────────────────────────────────────────────────────────
+# ── Chat API (OpenAI-compatible; DeepSeek by default) ─────────────────────────────────────────────────────────────
 API_RESP=""
 CURL_ERR=""
 HTTP_CODE=""
@@ -184,9 +314,10 @@ api_post() {   # $1 = JSON body -> sets API_RESP, HTTP_CODE; returns 0=ok 1=erro
 json_body() {   # $1 = "tools" to send the tool schema, $2 = "stream" to stream
     jq -c --arg m "$DEEPSEEK_MODEL" --argjson mt "${MAX_TOKENS:-8000}" \
           --arg th "$THINKING" --argjson tools "$TOOLS" --arg mode "${1:-notools}" \
-          --arg stream "${2:-off}" '
-        {model:$m, messages:., max_tokens:$mt}
-        + (if $th == "off" then {thinking:{type:"disabled"}}
+          --arg stream "${2:-off}" --arg tf "$TOKEN_FIELD" --arg prov "$PROVIDER" '
+        {model:$m, messages:.} + {($tf):$mt}
+        + (if $prov != "deepseek" then {}
+           elif $th == "off" then {thinking:{type:"disabled"}}
            elif $th == "on" then {thinking:{type:"enabled"}}
            else {} end)
         + (if $mode == "tools" then {tools:$tools, tool_choice:"auto"} else {} end)
@@ -218,7 +349,7 @@ stream_merge() {
           .finish = ($d.finish_reason // .finish)
           | .content += (($d.content // ""))
           | reduce (($d.tool_calls // [])[]) as $tc (.;
-              ($tc.index | tostring) as $i
+              (($tc.index // 0) | tostring) as $i
               | .tools[$i] = ((.tools[$i] // {"id":null,"name":null,"arguments":""})
                   | (if ($tc.id // null) != null then .id = $tc.id else . end)
                   | (if ($tc.function.name // null) != null then .name = $tc.function.name else . end)
@@ -680,7 +811,7 @@ weigh() {  # give a view equal layout-weight so a row's buttons fill the width
 declare -A setp=([$tgc_create_vertical]="true")
 setup_box="$(tg_create_linear "$aid" setp "$panel")"
 tg_view_width "$aid" "$setup_box" "$ROW_W"
-declare -A slp=([$tgc_create_text]="Enter your DeepSeek API key:")
+declare -A slp=([$tgc_create_text]="Enter your $PROVIDER_LABEL API key:")
 setup_lbl="$(tg_create_text "$aid" slp "$setup_box")"
 tg_view_text_color "$aid" "$setup_lbl" "$c_text"
 declare -A skp=([$tgc_create_text]="" [$tgc_create_type]="textPassword" [$tgc_create_single_line]="true")
@@ -699,7 +830,7 @@ tg_view_width "$aid" "$main_box" "$ROW_W"
 
 # header row: accent mark + title (left), small icon buttons (right)
 title_row="$(hrow "$main_box")"
-declare -A tlp=([$tgc_create_text]="⚡ DeepSeek")
+declare -A tlp=([$tgc_create_text]="⚡ $PROVIDER_LABEL")
 title="$(tg_create_text "$aid" tlp "$title_row")"
 tg_view_text_color "$aid" "$title" "$c_accent"
 tg_view_text_size  "$aid" "$title" 15
@@ -799,7 +930,7 @@ save_key() {
     API_KEY="$k"
     toast "Validating key…"
     busy_begin
-    api_post "$(jq -nc --arg m "$DEEPSEEK_MODEL" '{model:$m,messages:[{role:"user",content:"hi"}],max_tokens:1}')"
+    api_post "$(jq -nc --arg m "$DEEPSEEK_MODEL" --arg tf "$TOKEN_FIELD" '{model:$m,messages:[{role:"user",content:"hi"}]} + {($tf):16}')"
     local rc=$?
     busy_end
     local err=""
@@ -810,7 +941,7 @@ save_key() {
         return
     fi
     save_config
-    toast "Key saved ✓"
+    toast "$PROVIDER_LABEL key saved ✓"
     show_main
 }
 
@@ -862,6 +993,8 @@ do_send() {
     transcript_add $'\n\n🤖 '"$AGENT_ANSWER"
 }
 
+SCREEN_W_PX=0; SCREEN_H_PX=0   # must exist before the first panel_place (set -u)
+
 # ── Start in the right mode ──────────────────────────────────────────────────
 if [ -z "$API_KEY" ]; then
     expand; show_setup
@@ -876,7 +1009,6 @@ posX=40; posY=600
 tg_activity_position "$aid" "$posX" "$posY"
 
 # ── Screen bounds (so the bubble can't be dragged off-screen) ────────────────
-SCREEN_W_PX=0; SCREEN_H_PX=0
 update_screen_bounds() {
     # getConfiguration is not answered by this Termux:GUI build, and the timed
     # read could swallow a pending reply, so screen bounds are learned from real
@@ -988,6 +1120,39 @@ handle_touch() {   # $1 = raw event JSON (regex only: hot path)
 }
 
 # ── Click handling (shared by the event loop and the busy pump) ──────────────
+# M button: deepseek-flash -> deepseek-v4-pro -> next provider that has a key -> ...
+cycle_model() {
+    local list="" p kv cur next first="" i
+    for p in $KNOWN_PROVIDERS; do
+        [ "$p" = custom ] && [ -z "$CUSTOM_URL" ] && continue
+        kv="$(provider_keyvar "$p")"
+        if [ -n "${KEYS[$kv]:-}" ] || { [ "$p" = ollama ] && [ -n "${OLLAMA_MODEL:-${MODELS[ollama]:-}}" ]; } || [ "$p" = "$PROVIDER" ]; then
+            list="$list $p"
+        fi
+    done
+    if [ "$PROVIDER" = deepseek ] && [ "$DEEPSEEK_MODEL" = deepseek-flash ]; then
+        DEEPSEEK_MODEL="deepseek-v4-pro"
+    else
+        [ "$PROVIDER" = deepseek ] && MODELS[deepseek]="deepseek-flash"
+        next=""; cur=0; i=0
+        for p in $list; do
+            i=$((i+1)); [ -z "$first" ] && first="$p"
+            [ "$p" = "$PROVIDER" ] && cur=$i
+        done
+        i=0
+        for p in $list; do i=$((i+1)); [ "$i" -gt "$cur" ] && { next="$p"; break; }; done
+        [ -z "$next" ] && next="$first"
+        MODELS[$PROVIDER]="$DEEPSEEK_MODEL"
+        [ "$PROVIDER" = deepseek ] && MODELS[deepseek]="deepseek-flash"
+        activate_provider "$next"
+        PROVIDER_LABEL="$(provider_label "$PROVIDER")"
+        tg_view_text "$aid" "$title" "⚡ $PROVIDER_LABEL"
+    fi
+    save_config
+    toast "$PROVIDER_LABEL: $DEEPSEEK_MODEL"
+    transcript_add $'\n'"⚙ $PROVIDER_LABEL → $DEEPSEEK_MODEL"
+}
+
 handle_click() {   # $1 = view id
     local id="$1"
     # while a request/tool run is in flight only these clicks make sense; anything
@@ -1005,15 +1170,7 @@ handle_click() {   # $1 = view id
         "$quit_btn")  tg_activity_finish "$aid"; exit 0 ;;
         "$send_btn")  do_send ;;
         "$reset_btn") hist_clear; transcript_set "Conversation reset." ;;
-        "$model_btn")
-            case "$DEEPSEEK_MODEL" in
-                deepseek-flash) DEEPSEEK_MODEL="deepseek-v4-pro" ;;
-                *)              DEEPSEEK_MODEL="deepseek-flash" ;;
-            esac
-            save_config
-            toast "Model: $DEEPSEEK_MODEL"
-            transcript_add $'\n'"⚙ model → $DEEPSEEK_MODEL"
-            ;;
+        "$model_btn") cycle_model ;;
         "$mic_btn")
             transcript_add $'\n'"🎤 listening…"
             local raw spk
