@@ -1,6 +1,6 @@
 # Changelog
 
-## percobaan — portable Linux / macOS support
+## portable-linux — dukungan Linux / macOS portabel
 
 - `ai-agent-chat.sh`: portable `#!/usr/bin/env bash` shebang
 - Platform detection (`termux` / `linux` / `macos` / `other`) that no longer

@@ -1,22 +1,18 @@
-# ⚡ AI Agent — an AI assistant for Android (Termux): floating bubble and terminal chat
+# ⚡ AI Agent — an agentic AI assistant for Linux: terminal chat that actually runs commands
 
 🌐 **English** · [Bahasa Indonesia](README.id.md)
 
-> An agentic AI assistant for Android that you can use two ways: a **floating bubble** over every app, or a **chat in the Termux terminal**. Bring your own API key: DeepSeek (default), OpenAI, Gemini, Claude, OpenRouter, Groq, or a local Ollama model. Pure Bash.
+> An agentic AI assistant for Linux. Chat with DeepSeek (default), OpenAI, Gemini, Claude, OpenRouter, Groq, or a local Ollama model — and let the model read files, run programs, and fetch data on your machine through the `run_bash` tool. Pure Bash, no runtime to install. Bring your own API key.
 
-There are two front-ends that share the same settings, keys, and providers:
-
-- **`ai-agent-bubble.sh`**: a small draggable bubble floats over every app. Tap it to open a panel with **clipboard quick-actions** (translate, summarize, explain, fix, reply) and an **agentic chat** where the model can run shell commands on your phone to actually get things done.
-- **`ai-agent-chat.sh`**: the same agentic chat directly in the Termux terminal. No overlay and no Termux:GUI needed.
+Works on **Arch, Debian/Ubuntu, Fedora, openSUSE, Alpine, WSL, and macOS**, including inside `proot-distro` / `chroot` containers. See [Compatibility](PORTABILITY.md) for the full matrix.
 
 ## Purpose
 
 - **One agent, many AIs.** Not locked to a single vendor. Use DeepSeek, ChatGPT, Gemini, Claude, or a local model through Ollama.
-- **Bring your own key (BYOK).** No keys live in this repo and there is no middleman server. Your key stays on your phone and is sent only to the provider you choose.
-- **An AI that works, not just chats.** The model can read files, run programs, fetch data, and fix things on your device through the `run_bash` tool.
-- **Lightweight, pure Bash.** The terminal chat needs only Termux, `curl`, and `jq`. The bubble also needs Termux:GUI.
-
-This project is derived from [ExTV/termux-bubble](https://github.com/ExTV/termux-bubble) (GPL-3.0), with multi-provider support added.
+- **Bring your own key (BYOK).** No keys live in this repo and there is no middleman server. Your key stays on your machine and is sent only to the provider you choose.
+- **An AI that works, not just chats.** The model can read files, run programs, fetch data, and fix things on your system through the `run_bash` tool.
+- **Lightweight, pure Bash.** Needs only `bash`, `curl`, and `jq` — no Python, Node, or Docker.
+- **Terminal first.** No GUI, no overlay, no desktop session required. It works over SSH, in a tmux pane, or on a headless server.
 
 ## Supported providers
 
@@ -40,21 +36,26 @@ Notes:
 
 ## Requirements
 
-Install **three apps** from the **same source** (all from F-Droid, or all from GitHub Releases). Do not mix them: different signing keys make Android refuse to install the plugins.
+- **bash 4 or newer** (macOS ships 3.2 — install a newer one with `brew install bash`)
+- **curl** and **jq**
+- **git** (to clone and update)
 
-- [Termux](https://github.com/termux/termux-app/releases)
-- [Termux:GUI](https://github.com/termux/termux-gui/releases), the overlay engine
-- [Termux:API](https://github.com/termux/termux-api/releases), for clipboard, toast, and speech
+That is all. Install them with your package manager:
 
-Do not use the Play Store builds; they are outdated.
+| Distro | Command |
+|---|---|
+| Arch / Manjaro | `sudo pacman -S --needed bash curl jq git` |
+| Debian / Ubuntu / Mint | `sudo apt install bash curl jq git` |
+| Fedora / RHEL | `sudo dnf install bash curl jq git` |
+| openSUSE | `sudo zypper install bash curl jq git` |
+| Alpine | `sudo apk add bash curl jq git` |
+| macOS | `brew install bash curl jq git` |
 
-Then, in Termux:
+Check everything in one shot with:
 
 ```
-pkg update && pkg install termux-gui-bash jq curl termux-api git
+./ai-agent-chat.sh --doctor
 ```
-
-Grant Termux:GUI the **Display over other apps** permission (Settings > Apps > Termux:GUI).
 
 ## Quick start (recommended)
 
@@ -64,7 +65,7 @@ cd ai-agent
 bash install.sh
 ```
 
-`install.sh` installs the packages, adds a command called **`ai`**, and can open the menu automatically whenever Termux starts. After that, just type:
+`install.sh` detects your package manager, installs the dependencies (asking for `sudo` only when it is needed), and adds a command called **`ai`** to a directory that is already on your `PATH`. After that, just type:
 
 ```
 ai
@@ -72,37 +73,29 @@ ai
 
 ```
 ⚡ AI Agent
- AI: openai · gpt-4o-mini · key ✓
- Bubble: stopped
+ AI: deepseek · deepseek-flash · key ✓
+ Host: Arch Linux
 
   1) Chat in terminal
-  2) Start floating bubble (GUI)
-  3) Stop bubble
   4) Choose AI / API key / model
   5) Update
-  6) Open this menu when Termux starts: ON
   q) Quit
 ```
 
-Shortcuts: `ai chat`, `ai bubble`, `ai stop`, `ai setup`, `ai update`, `ai autostart on|off`, or `ai "your question"` for a one-shot answer.
+Shortcuts: `ai chat`, `ai setup`, `ai update`, or `ai "your question"` for a one-shot answer.
 
-**Autostart:** with `ai autostart on`, the menu opens on every new Termux session. Press `q` to close the session (so reopening Termux shows the menu again) or `s` to stay in the shell. To skip it once: `AI_AGENT_SKIP=1`.
-
-## Installation
+## Installation (manual)
 
 ```
 git clone https://github.com/Arkael-Dev/ai-agent
 cd ai-agent
-chmod +x ai-agent-bubble.sh ai-agent-chat.sh
-./ai-agent-bubble.sh      # floating bubble (needs Termux:GUI)
-./ai-agent-chat.sh        # chat in the terminal
+chmod +x ai-agent-chat.sh ai-agent
+./ai-agent-chat.sh            # chat in the terminal
 ```
 
-On first launch of the bubble the panel opens the **Settings** screen. Pick your **provider**, paste your **API key**, choose a **model**, and tap **Save**. The key and model are checked before they are saved.
+On first run you are asked for a **provider**, an **API key**, and a **model**. The key and model are checked with a tiny test request before they are saved.
 
-## Terminal chat (no GUI)
-
-`ai-agent-chat.sh` gives you the same agent in the Termux terminal. It uses the same provider, key, and model as the bubble, so there is nothing to set up twice.
+## Terminal chat
 
 On start it opens a **menu** where you choose the AI before chatting:
 
@@ -146,71 +139,44 @@ Press **Ctrl-C** to stop an answer that is still running. Replies stream in as t
 
 ## Choosing a provider and model
 
-**In the app (easiest):** tap the **⚙** button in the panel header.
-
-- **Provider ▸** cycles through DeepSeek, OpenAI, Gemini, Claude, OpenRouter, Groq, and Ollama.
-- **API key:** paste your own key. Leave it empty to keep the key already saved for that provider.
-- **Model:** type any model id, or tap **Models** to load the list from your provider and tap again to step through it.
-- **Save** checks the key and model with a tiny test request, then stores them. **Cancel** goes back without changes.
-
-**From the command line**, use flags or environment variables:
+The fastest way is option **4** in the `ai` menu, or `./ai-agent-chat.sh --setup`:
 
 ```
-./ai-agent-bubble.sh                                    # DeepSeek (default)
-./ai-agent-bubble.sh --provider openai                  # ChatGPT
-./ai-agent-bubble.sh --provider gemini --model gemini-2.5-pro
-./ai-agent-bubble.sh --provider ollama --model qwen2.5:3b
+./ai-agent-chat.sh --setup --provider openai
 ```
 
-Or pass the key through the environment:
+Or set the key through the environment for a single run:
 
 ```
-OPENAI_API_KEY="sk-..." ./ai-agent-bubble.sh --provider openai
+DEEPSEEK_API_KEY=sk-... ./ai-agent-chat.sh --provider deepseek "hello"
 ```
 
-Every key you have saved is kept, so you can switch providers without re-entering anything.
+## Ollama (local models)
 
-### Ollama (local models)
-
-No key and no internet needed. Make sure the Ollama server is running, then:
+Run Ollama locally and the agent talks to it without any key or internet access:
 
 ```
-./ai-agent-bubble.sh --provider ollama --model qwen2.5:3b
+ollama serve
+ollama pull qwen2.5:3b
+./ai-agent-chat.sh --provider ollama --model qwen2.5:3b
 ```
 
-If Ollama runs on a PC on the same network, point to it with:
+Set `OLLAMA_HOST` in the config file if the server is not on `127.0.0.1:11434`. Note that small local models often cannot call tools, which breaks the agentic part.
 
-```
-OLLAMA_HOST="http://192.168.1.10:11434" ./ai-agent-bubble.sh --provider ollama
-```
+## Custom provider
 
-Large models are heavy for a phone. On a phone, pick a small model (around 1–3B parameters).
+Anything that speaks the OpenAI-compatible chat API works. Set `AI_BASE_URL` and `AI_MODEL` in the config file and use `--provider custom`.
 
-### Custom provider
-
-For any other OpenAI-compatible service:
-
-```
-AI_BASE_URL="https://example.com/v1/chat/completions" AI_API_KEY="..." AI_MODEL="model-name" ./ai-agent-bubble.sh --provider custom
-```
-
-## Usage
-
-- **Drag** the bubble anywhere, **tap** it to open the panel.
-- **Clipboard actions:** copy text in any app, then tap *Trans / Sum / Expl / Fix / Reply*.
-- **Chat:** type a request and tap **Send**. The model can run bash commands on your phone to complete the task. Tap **Stop** to cancel.
-- **Copy / Speak:** copy or read aloud the last answer. **Mic** for voice input.
-- **Reset** clears the conversation. **▽** collapses the panel. **✕** quits.
-- **⚙** opens Settings to change provider, key, and model at any time.
-- **Moving the panel:** drag it by the header area (the title row). You can also tap **▽** to collapse it into the bubble, drag the bubble anywhere, then tap it to reopen.
-
-Command-line options:
+## Command-line options
 
 | Option | What it does |
 |---|---|
 | `--provider NAME` | Choose the provider |
 | `--model ID` | Choose the model |
-| `--update` | Runs `git pull` to update (bubble only) |
+| `--setup` | Open the AI menu only, then exit |
+| `--no-menu` | Skip the menu and use the saved settings |
+| `--new` | Start with an empty conversation |
+| `--doctor` | Print platform and dependency status |
 | `--help` | Show help |
 
 ## Configuration
@@ -227,36 +193,38 @@ File: `~/.config/ai-agent/config` (mode `600`, readable only by you).
 | `AI_MAX_TOKENS` | Maximum answer tokens |
 | `BASH_CONFIRM` | `1` = ask for confirmation before risky commands |
 
-Conversation history is stored in `history.json` (bubble) and `history-cli.json` (terminal chat) in the same folder and is deleted on **Reset**. Every command the AI runs is logged to `cmd.log`.
-
-> **Upgrading from an older version?** The settings folder moved from `~/.config/deepseek-bubble` to `~/.config/ai-agent`. It is moved automatically on first run, so your keys and history stay. The old `DEEPSEEK_THINKING` and `DEEPSEEK_MAX_TOKENS` names are still read and are rewritten as `AI_THINKING` and `AI_MAX_TOKENS` the next time settings are saved.
+Conversation history is stored in `history-cli.json` in the same folder and is deleted on **Reset**. Every command the AI runs is logged to `cmd.log`.
 
 ## Security — please read
 
-The agentic chat (bubble and terminal) can **run shell commands on your phone**. Use it carefully:
+The agentic chat can **run shell commands on your machine**. Use it carefully:
 
-- Turn on confirmation for risky commands (`rm`, `mv`, `chmod`, `dd`, `reboot`, and similar) by adding `BASH_CONFIRM=1` to the config file. In the bubble those commands wait until you tap **Run**; in the terminal chat they ask `y/N` (or use `/confirm on`).
+- Turn on confirmation for risky commands (`rm`, `mv`, `chmod`, `dd`, `reboot`, and similar) by adding `BASH_CONFIRM=1` to the config file, or use `/confirm on`. Risky commands then ask `y/N` before running.
 - Do not ask the AI to process text or repositories from sources you do not trust. They may contain hidden instructions that try to make the AI run harmful commands.
 - Check `cmd.log` to see everything that has been executed.
 - **Never share or commit your API keys.** Do not use someone else's key sent to you in a chat. Shared keys can be revoked at any time, and the owner can see all of your usage.
-- Clipboard text and your messages are sent to the provider you choose. Do not copy secrets when using the quick actions.
+- On a shared server, remember that the agent runs with *your* user's permissions. Use a dedicated user or a container if you do not trust what it might do.
+- Your messages are sent to the provider you choose. Do not paste secrets.
 
 ## Troubleshooting
 
 | Symptom | Fix |
 |---|---|
-| `bad interpreter: tgui-bash` | Run `pkg install termux-gui-bash` |
-| Termux:GUI "App not installed" | The app source differs from Termux. Check with `termux-info \| grep -i apk`, then install from the same source (F-Droid or GitHub) |
-| Bubble does not appear | Enable *Display over other apps* for Termux:GUI and make sure the app is installed |
+| `needs bash 4 or newer` | macOS ships bash 3.2: `brew install bash`, then run with `/opt/homebrew/bin/bash ./ai-agent-chat.sh` |
+| `jq: command not found` | Install jq with your package manager (see [Requirements](#requirements)) |
 | `Invalid key` | Check the key, provider, and model. Try a different `--model` |
-| Clipboard, toast, or speech not working | Install `termux-api` and the Termux:API app |
-| `SCREEN_H_PX: unbound variable` | Fixed in this version. Run `./ai-agent-bubble.sh --update` |
-| Panel will not drag | Drag from the title row. If it still fails, collapse with **▽**, move the bubble, and reopen. To report it, run with `DRAG_DEBUG=1` and share `~/.config/ai-agent/touch.log`. You can also raise `DRAG_EXTRA_PX` (default 110) |
+| `model not found` | Default model names change; pass `--model` with a valid id |
+| Something else looks wrong | Run `./ai-agent-chat.sh --doctor` and check the platform line |
+| Running inside a container | `--doctor` reports PRoot/chroot explicitly; the terminal chat works normally |
 
 ## Development
 
-- GitHub Actions runs syntax and ShellCheck checks on every push (see `.github/workflows`).
-- Planned: an agent mode that fixes code in a repo on its own (read errors, edit, run checks, then show a diff for approval), image generation support, and a fuller update command.
+- `tests/test-stream-parser.sh` — offline SSE parser tests
+- `tests/test-stream-live.sh` — live streaming checks against a mock endpoint
+
+```
+bash tests/test-stream-parser.sh
+```
 
 Contributions via Issues and Pull Requests are welcome.
 
@@ -265,6 +233,6 @@ Contributions via Issues and Pull Requests are welcome.
 GPL-3.0, see [LICENSE](LICENSE).
 
 - **Original author:** [ExTV](https://github.com/ExTV), creator of [ExTV/termux-bubble](https://github.com/ExTV/termux-bubble), which this project is based on.
-- **Modified by:** [Arkael-Dev](https://github.com/Arkael-Dev): multi-provider support, terminal chat, the `ai` launcher and installer, and other changes.
+- **Modified by:** [Arkael-Dev](https://github.com/Arkael-Dev): multi-provider support, terminal chat, portable Linux/macOS support, the `ai` launcher and installer, and other changes.
 
 Thanks to ExTV and to the authors of Termux and Termux:GUI.
