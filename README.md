@@ -62,11 +62,18 @@ chmod +x deepseek-bubble.sh
 ./deepseek-bubble.sh
 ```
 
-On first launch the panel asks for an API key. Paste it and tap **Save key**. The key is validated before it is saved.
+On first launch the panel opens the **Settings** screen. Pick your **provider**, paste your **API key**, choose a **model**, and tap **Save**. The key and model are checked before they are saved.
 
-## Choosing a provider
+## Choosing a provider and model
 
-Use flags or environment variables:
+**In the app (easiest):** tap the **⚙** button in the panel header.
+
+- **Provider ▸** cycles through DeepSeek, OpenAI, Gemini, Claude, OpenRouter, Groq, and Ollama.
+- **API key:** paste your own key. Leave it empty to keep the key already saved for that provider.
+- **Model:** type any model id, or tap **Models** to load the list from your provider and tap again to step through it.
+- **Save** checks the key and model with a tiny test request, then stores them. **Cancel** goes back without changes.
+
+**From the command line**, use flags or environment variables:
 
 ```
 ./deepseek-bubble.sh                                    # DeepSeek (default)
@@ -114,7 +121,8 @@ AI_BASE_URL="https://example.com/v1/chat/completions" AI_API_KEY="..." AI_MODEL=
 - **Chat:** type a request and tap **Send**. The model can run bash commands on your phone to complete the task. Tap **Stop** to cancel.
 - **Copy / Speak:** copy or read aloud the last answer. **Mic** for voice input.
 - **Reset** clears the conversation. **▽** collapses the panel. **✕** quits.
-- **M** switches model: for DeepSeek it toggles between `deepseek-flash` and `deepseek-v4-pro`, then moves on to the next provider that has a key.
+- **⚙** opens Settings to change provider, key, and model at any time.
+- **Moving the panel:** drag it by the header area (the title row). You can also tap **▽** to collapse it into the bubble, drag the bubble anywhere, then tap it to reopen.
 
 Command-line options:
 
@@ -161,6 +169,7 @@ The agentic chat can **run shell commands on your phone**. Use it carefully:
 | `Invalid key` | Check the key, provider, and model. Try a different `--model` |
 | Clipboard, toast, or speech not working | Install `termux-api` and the Termux:API app |
 | `SCREEN_H_PX: unbound variable` | Fixed in this version. Run `./deepseek-bubble.sh --update` |
+| Panel will not drag | Drag from the title row. If it still fails, collapse with **▽**, move the bubble, and reopen. To report it, run with `DRAG_DEBUG=1` and share `~/.config/deepseek-bubble/touch.log`. You can also raise `DRAG_EXTRA_PX` (default 110) |
 
 ## Development
 

@@ -36,6 +36,7 @@ Keys (env or ~/.config/deepseek-bubble/config):
   DEEPSEEK_API_KEY OPENAI_API_KEY GEMINI_API_KEY ANTHROPIC_API_KEY
   OPENROUTER_API_KEY GROQ_API_KEY   (ollama needs no key)
 Other env: AI_PROVIDER AI_MODEL AI_BASE_URL (full chat/completions URL, for "custom")
+In the app: tap the gear button to choose provider, key and model.
 HELP
             exit 0 ;;
         *) echo "Unknown option: $1 (try --help)" >&2; exit 1 ;;
@@ -102,6 +103,7 @@ HIST_LIMIT=60000        # trim conversation history to roughly this many chars b
 HIST_HARD_LIMIT=240000  # emergency trim during a single agent run
 TRANS_LIMIT=16000       # max chars kept in the on-screen transcript
 EDGE_KEEP=60            # px of the bubble kept on-screen when dragging
+DRAG_EXTRA_PX="${DRAG_EXTRA_PX:-110}"   # extra px below the title that still start a panel drag (status-bar offset)
 
 SYSTEM_PROMPT="You are a helpful assistant living in a floating bubble on the user's Android phone, running inside Termux (Bionic libc, no sudo/root). You can run bash commands on the device with the run_bash tool to inspect files, run programs, fetch things, and get tasks done. Prefer doing the work with tools over describing it. Keep answers concise and mobile-friendly."
 
@@ -807,21 +809,36 @@ weigh() {  # give a view equal layout-weight so a row's buttons fill the width
     tg_view_linear "$aid" "$1" 1
 }
 
-# ---- Setup box (first run / key entry) ----
+# ---- Settings box (first run, and the ⚙ button): provider, key, model ----
 declare -A setp=([$tgc_create_vertical]="true")
 setup_box="$(tg_create_linear "$aid" setp "$panel")"
 tg_view_width "$aid" "$setup_box" "$ROW_W"
-declare -A slp=([$tgc_create_text]="Enter your $PROVIDER_LABEL API key:")
+prov_btn="$(mkbtn "$setup_box" "Provider: $PROVIDER_LABEL ▸" 12)"
+tg_view_width "$aid" "$prov_btn" "$ROW_W"
+declare -A slp=([$tgc_create_text]="$PROVIDER_LABEL API key:")
 setup_lbl="$(tg_create_text "$aid" slp "$setup_box")"
 tg_view_text_color "$aid" "$setup_lbl" "$c_text"
+tg_view_text_size  "$aid" "$setup_lbl" 12
 declare -A skp=([$tgc_create_text]="" [$tgc_create_type]="textPassword" [$tgc_create_single_line]="true")
 setup_input="$(tg_create_edit "$aid" skp "$setup_box")"
 tg_view_width "$aid" "$setup_input" "$ROW_W"
 tg_view_text_color "$aid" "$setup_input" "$c_text"
 tg_view_bg_color   "$aid" "$setup_input" "$c_inputline"   # visible underline
+declare -A mlp=([$tgc_create_text]="Model (type any id, or tap Models):")
+model_lbl="$(tg_create_text "$aid" mlp "$setup_box")"
+tg_view_text_color "$aid" "$model_lbl" "$c_text"
+tg_view_text_size  "$aid" "$model_lbl" 12
+declare -A mdp=([$tgc_create_text]="$DEEPSEEK_MODEL" [$tgc_create_single_line]="true")
+model_input="$(tg_create_edit "$aid" mdp "$setup_box")"
+tg_view_width "$aid" "$model_input" "$ROW_W"
+tg_view_text_color "$aid" "$model_input" "$c_text"
+tg_view_bg_color   "$aid" "$model_input" "$c_inputline"
 setup_row="$(hrow "$setup_box")"
-setup_paste="$(mkbtn "$setup_row" "Paste")"; weigh "$setup_paste"
-setup_save="$(mkbtn "$setup_row" "Save key")"; weigh "$setup_save"
+setup_paste="$(mkbtn "$setup_row" "Paste key")"; weigh "$setup_paste"
+setup_models="$(mkbtn "$setup_row" "Models")"; weigh "$setup_models"
+setup_row2="$(hrow "$setup_box")"
+setup_save="$(mkbtn "$setup_row2" "Save")"; weigh "$setup_save"
+setup_cancel="$(mkbtn "$setup_row2" "Cancel")"; weigh "$setup_cancel"
 
 # ---- Main box (normal operation) ----
 declare -A mbp=([$tgc_create_vertical]="true")
@@ -840,7 +857,7 @@ tg_view_height "$aid" "$title" "$TITLE_H"      # = the icon row height, so text 
 tg_view_padding "$aid" "$title" 4 "$tgc_dir_left"
 close_btn="$(mkicon "$title_row" "▽")"
 quit_btn="$(mkicon  "$title_row" "✕")"
-model_btn="$(mkicon "$title_row" "M")"
+model_btn="$(mkicon "$title_row" "⚙")"
 hairline "$main_box"
 
 # clipboard action toolbar (acts on the currently-copied text) — smaller text fits
@@ -914,34 +931,115 @@ transcript_add() {
 $TRANSCRIPT"
 
 # ── Setup / main toggling ────────────────────────────────────────────────────
+SETUP_ORIG=""; SETUP_ORIG_MODEL=""
+MODEL_LIST=(); MODEL_IDX=0
+
+refresh_setup() {   # push the current provider / model into the settings widgets
+    local kv; kv="$(provider_keyvar "$PROVIDER")"
+    tg_view_text "$aid" "$prov_btn" "Provider: $PROVIDER_LABEL ▸"
+    if [ "$PROVIDER" = ollama ]; then
+        tg_view_text "$aid" "$setup_lbl" "Ollama: no key needed"
+    elif [ -n "${KEYS[$kv]:-}" ]; then
+        tg_view_text "$aid" "$setup_lbl" "$PROVIDER_LABEL key (empty = keep saved):"
+    else
+        tg_view_text "$aid" "$setup_lbl" "$PROVIDER_LABEL API key:"
+    fi
+    tg_view_text "$aid" "$setup_input" ""
+    tg_view_text "$aid" "$model_input" "$DEEPSEEK_MODEL"
+    tg_view_text "$aid" "$title" "⚡ $PROVIDER_LABEL"
+    MODEL_LIST=(); MODEL_IDX=0
+}
 show_setup() {
+    SETUP_ORIG="$PROVIDER"; SETUP_ORIG_MODEL="$DEEPSEEK_MODEL"
+    refresh_setup
     tg_view_vis "$aid" "$setup_box" "$tgc_vis_visible"
     tg_view_vis "$aid" "$main_box"  "$tgc_vis_gone"
 }
 show_main() {
+    tg_view_text "$aid" "$title" "⚡ $PROVIDER_LABEL"
     tg_view_vis "$aid" "$setup_box" "$tgc_vis_gone"
     tg_view_vis "$aid" "$main_box"  "$tgc_vis_visible"
 }
 
+# Provider button: remember what was typed, then move to the next provider
+setup_cycle_provider() {
+    local p next="" first="" cur=0 i=0 list="" m
+    get_text "$model_input"; m="${REPLY//[$'\n\r\t ']/}"
+    [ -n "$m" ] && MODELS[$PROVIDER]="$m"
+    for p in $KNOWN_PROVIDERS; do
+        [ "$p" = custom ] && [ -z "$CUSTOM_URL" ] && continue
+        list="$list $p"
+    done
+    for p in $list; do
+        i=$((i+1)); [ -z "$first" ] && first="$p"
+        [ "$p" = "$PROVIDER" ] && cur=$i
+    done
+    i=0
+    for p in $list; do i=$((i+1)); [ "$i" -gt "$cur" ] && { next="$p"; break; }; done
+    [ -z "$next" ] && next="$first"
+    activate_provider "$next"
+    PROVIDER_LABEL="$(provider_label "$PROVIDER")"
+    refresh_setup
+}
+
+# Models button: fetch the provider's model list once, then each tap fills in the next id
+models_action() {
+    local url key list hdr=()
+    if [ "${#MODEL_LIST[@]}" -eq 0 ]; then
+        url="${API_URL%/chat/completions}/models"
+        get_text "$setup_input"; key="${REPLY//[$'\n\r\t ']/}"
+        [ -z "$key" ] && key="$API_KEY"
+        if [ -z "$key" ]; then toast "Enter your key first, then tap Models"; return; fi
+        toast "Loading models…"
+        hdr=(-H "Authorization: Bearer $key")
+        [ "$PROVIDER" = claude ] && hdr+=(-H "x-api-key: $key" -H "anthropic-version: 2023-06-01")
+        list="$(timeout 20 curl -sS --max-time 15 "${hdr[@]}" "$url" 2>/dev/null \
+            | jq -r '(.data // .models // [])[] | (.id // .name // empty)' 2>/dev/null \
+            | sed 's#^models/##' \
+            | grep -viE 'embed|whisper|tts|dall-e|moderation|transcribe|realtime|audio|image|guard' \
+            | sort -u)"
+        if [ -z "$list" ]; then toast "Could not load models. Type the model id yourself."; return; fi
+        mapfile -t MODEL_LIST <<<"$list"
+        MODEL_IDX=0
+    else
+        MODEL_IDX=$(( (MODEL_IDX + 1) % ${#MODEL_LIST[@]} ))
+    fi
+    tg_view_text "$aid" "$model_input" "${MODEL_LIST[$MODEL_IDX]}"
+    toast "$((MODEL_IDX+1))/${#MODEL_LIST[@]}: ${MODEL_LIST[$MODEL_IDX]}"
+}
+
+setup_cancel_action() {
+    if [ "$SETUP_ORIG" != ollama ] && [ -z "${KEYS[$(provider_keyvar "$SETUP_ORIG")]:-}" ]; then
+        toast "Add a key first"; return
+    fi
+    MODELS[$SETUP_ORIG]="$SETUP_ORIG_MODEL"
+    activate_provider "$SETUP_ORIG"
+    PROVIDER_LABEL="$(provider_label "$PROVIDER")"
+    show_main
+}
+
 save_key() {
-    get_text "$setup_input"; local k="$REPLY"
-    k="${k//[$'\n\r\t ']/}"
+    local k m old_key="$API_KEY" old_model="$DEEPSEEK_MODEL" rc err=""
+    get_text "$setup_input"; k="${REPLY//[$'\n\r\t ']/}"
+    get_text "$model_input"; m="${REPLY//[$'\n\r\t ']/}"
+    [ -z "$m" ] && m="$(provider_model "$PROVIDER")"
+    [ -z "$m" ] && { toast "Enter a model id"; return; }
+    [ -z "$k" ] && k="$API_KEY"          # empty field = keep the saved key
     [ -z "$k" ] && { toast "Enter a key first"; return; }
-    API_KEY="$k"
-    toast "Validating key…"
+    API_KEY="$k"; DEEPSEEK_MODEL="$m"
+    toast "Checking…"
     busy_begin
     api_post "$(jq -nc --arg m "$DEEPSEEK_MODEL" --arg tf "$TOKEN_FIELD" '{model:$m,messages:[{role:"user",content:"hi"}]} + {($tf):16}')"
-    local rc=$?
+    rc=$?
     busy_end
-    local err=""
     [ -n "$API_RESP" ] && err="$(jq -r '.error.message // empty' <<<"$API_RESP" 2>/dev/null)"
     if [ "$rc" -ne 0 ] || [ -z "$API_RESP" ] || [ -n "$err" ]; then
-        API_KEY=""
-        toast "Invalid key: ${err:-${CURL_ERR:-no response}}"
+        API_KEY="$old_key"; DEEPSEEK_MODEL="$old_model"
+        toast "Failed: ${err:-${CURL_ERR:-no response}}"
         return
     fi
     save_config
-    toast "$PROVIDER_LABEL key saved ✓"
+    toast "$PROVIDER_LABEL · $DEEPSEEK_MODEL saved ✓"
     show_main
 }
 
@@ -1062,15 +1160,18 @@ touch_apply() {   # $1=x $2=y $3=action — apply one touch sample
             dx=$((x-dsx)); dy=$((y-dsy))
             adx=${dx#-}; ady=${dy#-}
             { [ "$adx" -gt 15 ] || [ "$ady" -gt 15 ]; } && moved=1
+            [ "$expanded" = 1 ] && [ "$moved" = 0 ] && return
             posX=$((spx+dx)); posY=$((spy+dy))
             clamp_pos
             send_pos
             ;;
         up)
             dx=$((x-dsx)); dy=$((y-dsy))
-            posX=$((spx+dx)); posY=$((spy+dy))
-            clamp_pos
-            send_pos
+            if [ "$expanded" = 0 ] || [ "$moved" = 1 ]; then
+                posX=$((spx+dx)); posY=$((spy+dy))
+                clamp_pos
+                send_pos
+            fi
             [ "$moved" = 0 ] && [ "$expanded" = 0 ] && expand
             PANEL_DRAG=0
             ;;
@@ -1086,11 +1187,15 @@ handle_touch() {   # $1 = raw event JSON (regex only: hot path)
     # the panel's title band moves the window, so the text stays scrollable.
     if [ "$expanded" = 1 ]; then
         if [ "$a" = "down" ]; then
-            if [ $((y - posY)) -ge 0 ] && [ $((y - posY)) -le $((52 * DENSITY_X)) ]; then
+            local band rel
+            band=$((52 * DENSITY_X + DRAG_EXTRA_PX)); rel=$((y - posY))
+            # accept both coordinate styles: screen-absolute (rel) and window-relative (y)
+            if { [ "$rel" -ge 0 ] && [ "$rel" -le "$band" ]; } || { [ "$y" -ge 0 ] && [ "$y" -le "$band" ]; }; then
                 PANEL_DRAG=1
             else
                 PANEL_DRAG=0
             fi
+            [ "${DRAG_DEBUG:-0}" = 1 ] && printf '%s down y=%s posY=%s band=%s drag=%s\n' "$(date +%T)" "$y" "$posY" "$band" "$PANEL_DRAG" >>"$CONFIG_DIR/touch.log" 2>/dev/null
         fi
         [ "${PANEL_DRAG:-0}" = 1 ] || return
     fi
@@ -1120,39 +1225,6 @@ handle_touch() {   # $1 = raw event JSON (regex only: hot path)
 }
 
 # ── Click handling (shared by the event loop and the busy pump) ──────────────
-# M button: deepseek-flash -> deepseek-v4-pro -> next provider that has a key -> ...
-cycle_model() {
-    local list="" p kv cur next first="" i
-    for p in $KNOWN_PROVIDERS; do
-        [ "$p" = custom ] && [ -z "$CUSTOM_URL" ] && continue
-        kv="$(provider_keyvar "$p")"
-        if [ -n "${KEYS[$kv]:-}" ] || { [ "$p" = ollama ] && [ -n "${OLLAMA_MODEL:-${MODELS[ollama]:-}}" ]; } || [ "$p" = "$PROVIDER" ]; then
-            list="$list $p"
-        fi
-    done
-    if [ "$PROVIDER" = deepseek ] && [ "$DEEPSEEK_MODEL" = deepseek-flash ]; then
-        DEEPSEEK_MODEL="deepseek-v4-pro"
-    else
-        [ "$PROVIDER" = deepseek ] && MODELS[deepseek]="deepseek-flash"
-        next=""; cur=0; i=0
-        for p in $list; do
-            i=$((i+1)); [ -z "$first" ] && first="$p"
-            [ "$p" = "$PROVIDER" ] && cur=$i
-        done
-        i=0
-        for p in $list; do i=$((i+1)); [ "$i" -gt "$cur" ] && { next="$p"; break; }; done
-        [ -z "$next" ] && next="$first"
-        MODELS[$PROVIDER]="$DEEPSEEK_MODEL"
-        [ "$PROVIDER" = deepseek ] && MODELS[deepseek]="deepseek-flash"
-        activate_provider "$next"
-        PROVIDER_LABEL="$(provider_label "$PROVIDER")"
-        tg_view_text "$aid" "$title" "⚡ $PROVIDER_LABEL"
-    fi
-    save_config
-    toast "$PROVIDER_LABEL: $DEEPSEEK_MODEL"
-    transcript_add $'\n'"⚙ $PROVIDER_LABEL → $DEEPSEEK_MODEL"
-}
-
 handle_click() {   # $1 = view id
     local id="$1"
     # while a request/tool run is in flight only these clicks make sense; anything
@@ -1170,7 +1242,7 @@ handle_click() {   # $1 = view id
         "$quit_btn")  tg_activity_finish "$aid"; exit 0 ;;
         "$send_btn")  do_send ;;
         "$reset_btn") hist_clear; transcript_set "Conversation reset." ;;
-        "$model_btn") cycle_model ;;
+        "$model_btn") show_setup ;;
         "$mic_btn")
             transcript_add $'\n'"🎤 listening…"
             local raw spk
@@ -1188,6 +1260,9 @@ handle_click() {   # $1 = view id
         "$speak_btn") [ -n "$LAST_ANSWER" ] && termux-tts-speak "$LAST_ANSWER" >/dev/null 2>&1 & ;;
         "$setup_paste") tg_view_text "$aid" "$setup_input" "$(termux-clipboard-get 2>/dev/null)" ;;
         "$setup_save")  save_key ;;
+        "$setup_cancel") setup_cancel_action ;;
+        "$setup_models") models_action ;;
+        "$prov_btn")    setup_cycle_provider ;;
         "$act_tr")    clip_action "Translate the following text to English (or to the user's language if it is already English). Output only the translation" ;;
         "$act_sum")   clip_action "Summarize the following text in a few bullet points" ;;
         "$act_exp")   clip_action "Explain the following clearly and simply" ;;

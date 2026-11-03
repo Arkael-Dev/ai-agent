@@ -62,11 +62,18 @@ chmod +x deepseek-bubble.sh
 ./deepseek-bubble.sh
 ```
 
-Saat pertama kali jalan, panel meminta API key. Tempel key lalu ketuk **Save key**. Key divalidasi dulu sebelum disimpan.
+Saat pertama kali jalan, panel membuka layar **Settings**. Pilih **provider**, tempel **API key**, pilih **model**, lalu ketuk **Save**. Key dan model dicek dulu sebelum disimpan.
 
-## Memilih provider
+## Memilih provider dan model
 
-Pakai flag atau variabel lingkungan:
+**Lewat aplikasi (paling mudah):** ketuk tombol **⚙** di header panel.
+
+- **Provider ▸** berganti antara DeepSeek, OpenAI, Gemini, Claude, OpenRouter, Groq, dan Ollama.
+- **API key:** tempel key milikmu sendiri. Kosongkan untuk tetap memakai key yang sudah tersimpan untuk provider itu.
+- **Model:** ketik id model apa saja, atau ketuk **Models** untuk memuat daftar dari provider lalu ketuk lagi untuk berpindah antar model.
+- **Save** mengecek key dan model dengan permintaan uji kecil, lalu menyimpannya. **Cancel** kembali tanpa perubahan.
+
+**Lewat baris perintah**, pakai flag atau variabel lingkungan:
 
 ```
 ./deepseek-bubble.sh                                    # DeepSeek (default)
@@ -114,7 +121,8 @@ AI_BASE_URL="https://contoh.com/v1/chat/completions" AI_API_KEY="..." AI_MODEL="
 - **Chat:** ketik permintaan lalu **Send**. Model bisa menjalankan perintah bash di HP untuk menyelesaikan tugas. Ketuk **Stop** untuk membatalkan.
 - **Copy / Speak:** salin atau bacakan jawaban terakhir. **Mic** untuk input suara.
 - **Reset** menghapus percakapan. **▽** menciutkan panel. **✕** menutup aplikasi.
-- **M** berganti model: untuk DeepSeek bergantian `deepseek-flash` dan `deepseek-v4-pro`, lalu lanjut ke provider berikutnya yang sudah punya key.
+- **⚙** membuka Settings untuk mengganti provider, key, dan model kapan saja.
+- **Memindahkan panel:** geser lewat area header (baris judul). Bisa juga ketuk **▽** untuk menciutkan jadi bubble, geser bubble ke mana saja, lalu ketuk untuk membukanya lagi.
 
 Opsi baris perintah:
 
@@ -161,6 +169,7 @@ Chat agentik bisa **menjalankan perintah shell di HP kamu**. Gunakan dengan hati
 | `Invalid key` | Periksa key, provider, dan model. Coba `--model` lain |
 | Clipboard, toast, atau suara tidak jalan | Pasang `termux-api` dan aplikasi Termux:API |
 | `SCREEN_H_PX: unbound variable` | Sudah diperbaiki di versi ini. Jalankan `./deepseek-bubble.sh --update` |
+| Panel tidak bisa digeser | Geser dari baris judul. Kalau tetap gagal, ciutkan dengan **▽**, pindahkan bubble, lalu buka lagi. Untuk melapor, jalankan dengan `DRAG_DEBUG=1` dan kirim `~/.config/deepseek-bubble/touch.log`. Bisa juga naikkan `DRAG_EXTRA_PX` (bawaan 110) |
 
 ## Pengembangan
 
