@@ -2,7 +2,7 @@
 # Live test of api_stream_post against a local mock SSE endpoint (no real API).
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
-SCRIPT="${1:-$HERE/../deepseek-bubble.sh}"
+SCRIPT="${1:-$HERE/../ai-agent-bubble.sh}"
 PORT=8899
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/livesstest.XXXXXX")"
 SRV_PID=""

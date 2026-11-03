@@ -1,8 +1,8 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# Offline test for the SSE parser block in deepseek-bubble.sh (no network).
+# Offline test for the SSE parser block in ai-agent-bubble.sh (no network).
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
-SCRIPT="${1:-$HERE/../deepseek-bubble.sh}"
+SCRIPT="${1:-$HERE/../ai-agent-bubble.sh}"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/streamtest.XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT
 aid=0; answer=0; TRANSCRIPT_PRE="PRE|"
