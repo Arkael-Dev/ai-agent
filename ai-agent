@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Based on ExTV/termux-bubble (https://github.com/ExTV/termux-bubble), GPL-3.0.
-# Original author: ExTV. Modified by Arkael-Dev.
+# Original author: ExTV. Modified by Arkael-Dev for Linux desktops.
 set -u
 
 # ai — one command for everything. Installed as `ai` by install.sh.
@@ -27,11 +27,8 @@ resolve_path() {
 SELF="$(resolve_path "${BASH_SOURCE[0]}")"
 DIR="$(dirname "$SELF")"
 CHAT="$DIR/ai-agent-chat.sh"
-# Platform: termux (bubble era, not used here) / linux / macos / other
-if [ -n "${TERMUX_VERSION:-}" ] && [ -n "${PREFIX:-}" ]; then PLATFORM=termux
-elif [ "$(uname -s 2>/dev/null)" = Darwin ]; then PLATFORM=macos
-elif [ -r /etc/os-release ] || [ "$(uname -s 2>/dev/null)" = Linux ]; then PLATFORM=linux
-else PLATFORM=other; fi
+# Platform: linux / macos (Termux is not a target of this build)
+if [ "$(uname -s 2>/dev/null)" = Darwin ]; then PLATFORM=macos; else PLATFORM=linux; fi
 
 CONFIG_DIR="${AI_CONFIG_DIR:-$HOME/.config/ai-agent}"
 GUI_LOG="$CONFIG_DIR/gui.log"
@@ -203,7 +200,7 @@ case "${1:-}" in
             if command -v "$c" >/dev/null 2>&1; then printf '  %-8s ok   %s\n' "$c" "$(command -v "$c")"; else printf '  %-8s MISSING\n' "$c"; fi
         done
         ;;
-    bubble|stop) echo "The floating bubble is Termux-only; this build has a GUI dialog instead. Run: ai" ;;
+    bubble|stop) echo "The floating bubble was removed; this build uses a GUI dialog instead. Run: ai" ;;
     -h|--help|help) sed -n '5,13p' "$SELF" | sed 's/^# \{0,1\}//' ;;
     *)         exec bash "$CHAT" "$@" ;;
 esac

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Based on ExTV/termux-bubble (https://github.com/ExTV/termux-bubble), GPL-3.0.
-# Original author: ExTV. Modified by Arkael-Dev.
+# Original author: ExTV. Modified by Arkael-Dev for Linux desktops.
 
 # This script needs bash >= 4 (associative arrays, mapfile, ${v,,}).
 # macOS still ships bash 3.2 as /bin/bash, so fail with advice instead of a
@@ -137,43 +137,26 @@ provider_keyvar() {
     esac
 }
 
-# ── Platform (Termux / Linux / other) ────────────────────────────────────────
-# Real Termux always exports TERMUX_VERSION *and* sets PREFIX to its own usr dir.
-# A proot/chroot container on Android may still see TERMUX_VERSION, so require
-# both and confirm bash actually lives under $PREFIX.
-case "${TERMUX_VERSION:-}" in
-    "") _is_termux=0 ;;
-    *)  case "${PREFIX:-}" in
-            "") _is_termux=0 ;;
-            *)  case "$(command -v bash 2>/dev/null)" in
-                    "$PREFIX"/*) _is_termux=1 ;;
-                    *)           _is_termux=0 ;;
-                esac ;;
-        esac ;;
-esac
-if [ "$_is_termux" = 1 ]; then
-    PLATFORM=termux
-elif [ "$(uname -s 2>/dev/null)" = Darwin ]; then
+# ── Platform: Linux desktop / server, or macOS ──────────────────────────────
+# Termux is not supported by this build (it was only needed by the removed
+# bubble). A proot-distro / chroot image on Android shows up as plain Linux,
+# which is exactly what we want.
+if [ "$(uname -s 2>/dev/null)" = Darwin ]; then
     PLATFORM=macos
 elif [ -d /proc ] && [ -f /etc/os-release ]; then
     PLATFORM=linux
 else
-    PLATFORM=other
+    PLATFORM=linux
 fi
-unset _is_termux
 
 # human-readable distro name, used in --doctor and the system prompt
 platform_desc() {
-    if [ "$PLATFORM" = termux ]; then
-        echo "Termux on Android"
-    elif [ -r /etc/os-release ]; then
+    if [ -r /etc/os-release ]; then
         ( . /etc/os-release 2>/dev/null; echo "${PRETTY_NAME:-${NAME:-Linux}}" )
     else
         echo "$(uname -s 2>/dev/null || echo Linux)"
     fi
 }
-# PREFIX on Termux, empty-ish elsewhere
-AI_PREFIX="${PREFIX:-$(dirname "$(dirname "$(command -v bash)")")}"
 
 # system info used in the tool description / --doctor
 uname_str() { uname -srm 2>/dev/null || echo unknown; }
@@ -188,7 +171,6 @@ if [ "$DOCTOR" = 1 ]; then
         *PRoot*|*proot*) echo "note     : running inside a PRoot container" ;;
     esac
     echo "shell    : $BASH_VERSION"
-    echo "prefix   : $AI_PREFIX"
     echo "config   : ${AI_CONFIG_DIR:-$HOME/.config/ai-agent}"
     echo "--- dependencies ---"
     for d in bash curl jq sed grep python3; do
@@ -200,9 +182,14 @@ if [ "$DOCTOR" = 1 ]; then
     else
         echo "  timeout  missing (commands run without a time limit)"
     fi
-    echo "--- optional (Termux only) ---"
-    for d in termux-clipboard-get termux-clipboard-set termux-toast termux-tts-speak; do
-        command -v "$d" >/dev/null 2>&1 && echo "  $d ok" || echo "  $d not available (Android feature)"
+    echo "--- optional ---"
+    if [ "$PLATFORM" = macos ]; then
+        for d in dialog iTerm2 osascript; do
+            command -v "$d" >/dev/null 2>&1 && echo "  $d ok" || echo "  $d not installed"
+        done
+    fi
+    for t in gnome-terminal konsole xfce4-terminal alacritty kitty foot xterm; do
+        command -v "$t" >/dev/null 2>&1 && { echo "  $t ok"; break; }
     done
     exit 0
 fi
@@ -223,19 +210,17 @@ if [ -z "${AI_CONFIG_DIR:-}" ] && [ ! -d "$CONFIG_DIR" ] && [ -d "$HOME/.config/
     mv "$HOME/.config/deepseek-bubble" "$CONFIG_DIR" 2>/dev/null
 fi
 CONFIG_FILE="$CONFIG_DIR/config"
-HIST_FILE="$CONFIG_DIR/history-cli.json"   # separate from the bubble's history
+HIST_FILE="$CONFIG_DIR/history-cli.json"
 CMD_LOG="$CONFIG_DIR/cmd.log"
 MAX_TOKENS=8000; THINKING=off; CONFIRM_DANGEROUS=0
 MAX_ITERS=25; CMD_TIMEOUT=120; OUT_LIMIT=10000; HIST_LIMIT=60000; HIST_HARD_LIMIT=240000
 HTTP_RETRIES=2
-RISKY_PATTERN='(^|[;&|(]|&&|\|\|)[[:space:]]*(rm|rmdir|shred|mkfs|dd|truncate|mv|chmod|chown|pm[[:space:]]+(un)?install|am[[:space:]]+force-stop|settings[[:space:]]+put|reboot|svc[[:space:]]|cmd[[:space:]]|termux-clipboard-set)'
+RISKY_PATTERN='(^|[;&|(]|&&|\|\|)[[:space:]]*(rm|rmdir|shred|mkfs|dd|truncate|mv|chmod|chown|pm[[:space:]]+(un)?install|am[[:space:]]+force-stop|settings[[:space:]]+put|reboot|svc[[:space:]]|cmd[[:space:]])'
 
 # Built after PLATFORM is known so the prompt matches the real host.
 case "$PLATFORM" in
-  termux) _host="the user's Termux terminal on an Android phone (Bionic libc, no sudo/root)" ;;
-  macos)  _host="the user's macOS terminal" ;;
-  linux)  _host="the user's Linux terminal ($(platform_desc))" ;;
-  *)      _host="the user's shell" ;;
+  macos) _host="the user's macOS terminal" ;;
+  *)     _host="the user's Linux terminal ($(platform_desc))" ;;
 esac
 SYSTEM_PROMPT="You are a helpful assistant in $_host. You can run shell commands with the run_bash tool to inspect files, run programs, fetch things, and get tasks done. Prefer doing the work with tools over describing it. Keep answers concise and readable; when the screen is small, use short lines and avoid huge dumps."
 unset _host

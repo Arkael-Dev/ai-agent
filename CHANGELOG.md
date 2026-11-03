@@ -11,6 +11,9 @@
   chosen menu entry come back empty on some shells
 - removed `ai-agent-bubble.sh` and its `pkg install termux-api termux-gui-bash`
   paths (`install.sh` and the install hints no longer mention Termux)
+- Termux removed from the platform layer: no `PLATFORM=termux`, no `TERMUX_VERSION`
+  / `PREFIX` special cases, no Termux-only dependency checks or autostart prompt;
+  the launcher and `install.sh` now assume a Linux desktop/server (or macOS)
 - README / README.id / PORTABILITY.md rewritten for Linux desktops; install
   instructions point at `-b portable-linux` so a plain `git clone` no longer
   pulls the old `main` build

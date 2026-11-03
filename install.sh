@@ -6,23 +6,20 @@ set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ── where does the launcher go? ─────────────────────────────────────────────
-# Termux: its own prefix bin.  Otherwise the first user-writable dir in PATH,
-# falling back to ~/.local/bin (created on demand) so we never need root.
-if [ -n "${TERMUX_VERSION:-}" ] && [ -n "${PREFIX:-}" ]; then
-    BIN="$PREFIX/bin"
-else
-    BIN=""
-    IFS=: read -r -a _paths <<<"$PATH"
-    for _p in "${_paths[@]}"; do
-        case "$_p" in
-            ""|/data/*) continue ;;                  # empty entry or Termux's own bin
-            "$HOME"/*) [ -w "$_p" ] && { BIN="$_p"; break; } ;;
-        esac
-    done
-    if [ -z "$BIN" ]; then
-        BIN="$HOME/.local/bin"
-        mkdir -p "$BIN"
-    fi
+# The first user-writable dir in PATH, falling back to ~/.local/bin (created on
+# demand) so we never need root. /usr/local/bin and similar stay untouched
+# unless we may actually write there.
+BIN=""
+IFS=: read -r -a _paths <<<"$PATH"
+for _p in "${_paths[@]}"; do
+    case "$_p" in
+        "") continue ;;                              # empty PATH entry
+    esac
+    [ -d "$_p" ] && [ -w "$_p" ] && { BIN="$_p"; break; }
+done
+if [ -z "$BIN" ]; then
+    BIN="$HOME/.local/bin"
+    mkdir -p "$BIN"
 fi
 
 echo "⚡ Installing AI Agent from $DIR"
@@ -64,9 +61,4 @@ case ":$PATH:" in
     *) echo "  ⚠ $BIN is not in your PATH — add:  export PATH=\"$BIN:\$PATH\"" ;;
 esac
 
-# autostart is a Termux-only convenience
-if [ -n "${TERMUX_VERSION:-}" ] && [ -n "${PREFIX:-}" ] && [ -t 0 ]; then
-    read -r -p "Open the menu automatically whenever Termux starts? [y/N] " a
-    case "$a" in y|Y|yes) "$DIR/ai-agent" autostart on ;; esac
-fi
 echo "Done. Start with:  ai"
