@@ -1,5 +1,23 @@
 # Changelog
 
+## percobaan — portable Linux / macOS support
+
+- `ai-agent-chat.sh`: portable `#!/usr/bin/env bash` shebang
+- Platform detection (`termux` / `linux` / `macos` / `other`) that no longer
+  misidentifies a proot-distro container as Termux (requires `TERMUX_VERSION`
+  *and* a matching `PREFIX`)
+- `--doctor` now prints the distro name and flags PRoot containers
+- Distro-aware install hints (pacman / apt / dnf / zypper / apk / brew / pkg)
+- Portable `timeout` shim: `timeout --foreground` -> `gtimeout` -> no limit
+- System prompt and tool description follow the detected host instead of
+  assuming Android/Termux
+- `install.sh`: installs the `ai` launcher into a user-writable PATH dir on
+  desktop Linux/macOS (no root), skips Termux-only packages elsewhere
+- `ai-agent`: hides bubble / autostart menu entries outside Termux and shows
+  the host distro instead
+- `tests/*.sh`: portable shebangs; the live streaming test tolerates slower
+  machines instead of asserting an exact render count
+
 Floating bubble overlay or terminal chat. Pure Bash, bring your own API key.
 Repo: github.com/Arkael-Dev/ai-agent
 License: GPL-3.0 (derivative of ExTV/termux-bubble)

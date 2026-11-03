@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 # Offline test for the SSE parser block in ai-agent-bubble.sh (no network).
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"

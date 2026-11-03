@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 # Based on ExTV/termux-bubble (https://github.com/ExTV/termux-bubble), GPL-3.0.
 # Original author: ExTV. Modified by Arkael-Dev.
+
+# This script needs bash >= 4 (associative arrays, mapfile, ${v,,}).
+# macOS still ships bash 3.2 as /bin/bash, so fail with advice instead of a
+# syntax error nobody can read.
+if [ -z "${BASH_VERSINFO:-}" ] || [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
+    echo "ai-agent-chat needs bash 4 or newer (found ${BASH_VERSION:-unknown})." >&2
+    echo "  macOS:  brew install bash  and run:  /opt/homebrew/bin/bash $0" >&2
+    echo "  others: install bash via your package manager" >&2
+    exit 1
+fi
+
 set -u
 
 # ai-agent-chat.sh — chat with any supported AI (with the agent tool run_bash)
@@ -45,10 +56,31 @@ while [ $# -gt 0 ]; do
     esac
 done
 
+# install hint that matches the host package manager
+install_hint() {
+    local pkgs="curl jq coreutils grep sed"
+    if [ -n "${TERMUX_VERSION:-}" ] && [ -n "${PREFIX:-}" ]; then
+        echo "pkg install $pkgs"
+    elif command -v pacman >/dev/null 2>&1; then
+        echo "pacman -S $pkgs"
+    elif command -v apt-get >/dev/null 2>&1; then
+        echo "sudo apt install $pkgs"
+    elif command -v dnf >/dev/null 2>&1; then
+        echo "sudo dnf install $pkgs"
+    elif command -v zypper >/dev/null 2>&1; then
+        echo "sudo zypper install $pkgs"
+    elif command -v apk >/dev/null 2>&1; then
+        echo "sudo apk add $pkgs"
+    elif command -v brew >/dev/null 2>&1; then
+        echo "brew install $pkgs"
+    else
+        echo "install these with your package manager: $pkgs"
+    fi
+}
+
 for _dep in curl jq sed grep; do
     command -v "$_dep" >/dev/null 2>&1 || {
-        if [ -n "${TERMUX_VERSION:-}" ] || [ -d /data/data/com.termux ]; then _hint="pkg install curl jq coreutils"; else _hint="apt install curl jq coreutils  (or your distro equivalent)"; fi
-        echo "Missing dependency: $_dep — install with: $_hint" >&2; exit 1; }
+        echo "Missing dependency: $_dep — install with: $(install_hint)" >&2; exit 1; }
 done
 
 # ── Colours (only on a terminal) ─────────────────────────────────────────────
@@ -108,7 +140,20 @@ provider_keyvar() {
 }
 
 # ── Platform (Termux / Linux / other) ────────────────────────────────────────
-if [ -n "${TERMUX_VERSION:-}" ] || [ -d /data/data/com.termux ]; then
+# Real Termux always exports TERMUX_VERSION *and* sets PREFIX to its own usr dir.
+# A proot/chroot container on Android may still see TERMUX_VERSION, so require
+# both and confirm bash actually lives under $PREFIX.
+case "${TERMUX_VERSION:-}" in
+    "") _is_termux=0 ;;
+    *)  case "${PREFIX:-}" in
+            "") _is_termux=0 ;;
+            *)  case "$(command -v bash 2>/dev/null)" in
+                    "$PREFIX"/*) _is_termux=1 ;;
+                    *)           _is_termux=0 ;;
+                esac ;;
+        esac ;;
+esac
+if [ "$_is_termux" = 1 ]; then
     PLATFORM=termux
 elif [ "$(uname -s 2>/dev/null)" = Darwin ]; then
     PLATFORM=macos
@@ -117,6 +162,18 @@ elif [ -d /proc ] && [ -f /etc/os-release ]; then
 else
     PLATFORM=other
 fi
+unset _is_termux
+
+# human-readable distro name, used in --doctor and the system prompt
+platform_desc() {
+    if [ "$PLATFORM" = termux ]; then
+        echo "Termux on Android"
+    elif [ -r /etc/os-release ]; then
+        ( . /etc/os-release 2>/dev/null; echo "${PRETTY_NAME:-${NAME:-Linux}}" )
+    else
+        echo "$(uname -s 2>/dev/null || echo Linux)"
+    fi
+}
 # PREFIX on Termux, empty-ish elsewhere
 AI_PREFIX="${PREFIX:-$(dirname "$(dirname "$(command -v bash)")")}"
 
@@ -128,6 +185,10 @@ uname_str() { uname -srm 2>/dev/null || echo unknown; }
 if [ "$DOCTOR" = 1 ]; then
     echo "ai-agent-chat — environment check"
     echo "platform : $PLATFORM ($(uname_str))"
+    echo "distro   : $(platform_desc)"
+    case "$(uname -r 2>/dev/null)" in
+        *PRoot*|*proot*) echo "note     : running inside a PRoot container" ;;
+    esac
     echo "shell    : $BASH_VERSION"
     echo "prefix   : $AI_PREFIX"
     echo "config   : ${AI_CONFIG_DIR:-$HOME/.config/ai-agent}"
@@ -171,8 +232,16 @@ MAX_ITERS=25; CMD_TIMEOUT=120; OUT_LIMIT=10000; HIST_LIMIT=60000; HIST_HARD_LIMI
 HTTP_RETRIES=2
 RISKY_PATTERN='(^|[;&|(]|&&|\|\|)[[:space:]]*(rm|rmdir|shred|mkfs|dd|truncate|mv|chmod|chown|pm[[:space:]]+(un)?install|am[[:space:]]+force-stop|settings[[:space:]]+put|reboot|svc[[:space:]]|cmd[[:space:]]|termux-clipboard-set)'
 
-SYSTEM_PROMPT="You are a helpful assistant in the user's Termux terminal on an Android phone (Bionic libc, no sudo/root). You can run bash commands on the device with the run_bash tool to inspect files, run programs, fetch things, and get tasks done. Prefer doing the work with tools over describing it. Keep answers concise and readable on a small screen."
-TOOLS='[{"type":"function","function":{"name":"run_bash","description":"Run a bash command on the Android/Termux device and return combined stdout+stderr plus the exit code.","parameters":{"type":"object","properties":{"command":{"type":"string","description":"The bash command to run."}},"required":["command"]}}}]'
+# Built after PLATFORM is known so the prompt matches the real host.
+case "$PLATFORM" in
+  termux) _host="the user's Termux terminal on an Android phone (Bionic libc, no sudo/root)" ;;
+  macos)  _host="the user's macOS terminal" ;;
+  linux)  _host="the user's Linux terminal ($(platform_desc))" ;;
+  *)      _host="the user's shell" ;;
+esac
+SYSTEM_PROMPT="You are a helpful assistant in $_host. You can run shell commands with the run_bash tool to inspect files, run programs, fetch things, and get tasks done. Prefer doing the work with tools over describing it. Keep answers concise and readable; when the screen is small, use short lines and avoid huge dumps."
+unset _host
+TOOLS='[{"type":"function","function":{"name":"run_bash","description":"Run a bash command on the local machine and return combined stdout+stderr plus the exit code.","parameters":{"type":"object","properties":{"command":{"type":"string","description":"The bash command to run."}},"required":["command"]}}}]'
 
 PROVIDER="${AI_PROVIDER:-deepseek}"
 API_URL=""; MODEL=""; API_KEY=""; TOKEN_FIELD="max_tokens"

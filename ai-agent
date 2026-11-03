@@ -6,16 +6,30 @@ set -u
 # ai — one command for everything. Installed as `ai` by install.sh.
 #   ai                 menu (chat / bubble / settings / update)
 #   ai chat            chat in the terminal
-#   ai bubble          start the floating bubble (GUI)
+#   ai bubble          start the floating bubble (GUI, Termux only)
 #   ai stop            stop the bubble
 #   ai setup           choose AI, API key and model
 #   ai update          git pull
 #   ai autostart on|off   open this menu on every new Termux session
 #   ai "question"      one-shot answer
 
-SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+# portable realpath: `readlink -f` is GNU-only, macOS/BSD lack it
+resolve_path() {
+    local p="$1" d
+    while [ -L "$p" ]; do
+        d="$(cd -P "$(dirname "$p")" && pwd)"
+        p="$(readlink "$p")"
+        case "$p" in /*) ;; *) p="$d/$p" ;; esac
+    done
+    d="$(cd -P "$(dirname "$p")" && pwd)"
+    printf '%s/%s\n' "$d" "$(basename "$p")"
+}
+SELF="$(resolve_path "${BASH_SOURCE[0]}")"
 DIR="$(dirname "$SELF")"
 CHAT="$DIR/ai-agent-chat.sh"
+# The bubble and the Termux autostart hook only exist on Android/Termux.
+if [ -n "${TERMUX_VERSION:-}" ] && [ -n "${PREFIX:-}" ]; then IS_TERMUX=1; else IS_TERMUX=0; fi
+
 BUBBLE="$DIR/ai-agent-bubble.sh"
 CONFIG_DIR="${AI_CONFIG_DIR:-$HOME/.config/ai-agent}"
 LOG="$CONFIG_DIR/bubble.log"
@@ -38,7 +52,9 @@ rc_files() { for f in "$HOME/.zshrc" "$HOME/.bashrc"; do [ -f "$f" ] && echo "$f
 autostart_on_p() { local f; for f in $(rc_files); do grep -qF "$MARK_BEGIN" "$f" && return 0; done; return 1; }
 
 AUTO_LINE='[ -t 0 ] && [ -t 1 ] && [ -z "${AI_AGENT_SKIP:-}" ] && command -v ai >/dev/null 2>&1 && ai --auto && exit'
-autostart_strip() { local f; for f in $(rc_files); do sed -i "\|$MARK_BEGIN|,\|$MARK_END|d" "$f"; done; }
+# GNU sed accepts `-i`, BSD/macOS requires `-i ''`; detect once and reuse.
+if sed --version >/dev/null 2>&1; then SED_INPLACE=(sed -i); else SED_INPLACE=(sed -i ''); fi
+autostart_strip() { local f; for f in $(rc_files); do "${SED_INPLACE[@]}" "\|$MARK_BEGIN|,\|$MARK_END|d" "$f"; done; }
 autostart_write() {
     local f
     [ -f "$HOME/.bashrc" ] || touch "$HOME/.bashrc"
@@ -92,9 +108,13 @@ status_line() {
     model="$(cfg_get "MODEL_$prov")"; model="${model:-default}"
     if [ "$prov" = ollama ]; then key="local"
     else kv="$(keyvar "$prov")"; if [ -n "$(cfg_get "$kv")" ]; then key="key ✓"; else key="NO KEY — use option 4"; fi; fi
-    bubble_running && bub="running ●" || bub="stopped"
     echo " AI: ${C_ACC}$prov${C_RST} · $model · $key"
-    echo " Bubble: $bub"
+    if [ "$IS_TERMUX" = 1 ]; then
+        bubble_running && bub="running ●" || bub="stopped"
+        echo " Bubble: $bub"
+    else
+        echo " Host: $(. /etc/os-release 2>/dev/null; echo "${PRETTY_NAME:-$(uname -s)}")"
+    fi
 }
 
 AUTO=0
@@ -107,12 +127,16 @@ menu() {
         status_line
         echo
         echo "  1) Chat in terminal"
-        echo "  2) Start floating bubble (GUI)"
-        echo "  3) Stop bubble"
+        if [ "$IS_TERMUX" = 1 ]; then
+            echo "  2) Start floating bubble (GUI)"
+            echo "  3) Stop bubble"
+        fi
         echo "  4) Choose AI / API key / model"
         echo "  5) Update"
-        autostart_on_p && a="ON" || a="OFF"
-        echo "  6) Open this menu when Termux starts: $a"
+        if [ "$IS_TERMUX" = 1 ]; then
+            autostart_on_p && a="ON" || a="OFF"
+            echo "  6) Open this menu when Termux starts: $a"
+        fi
         if [ "$AUTO" = 1 ]; then
             echo "  s) Shell (stay in Termux)"
             echo "  q) Quit (close this session)"
@@ -122,11 +146,11 @@ menu() {
         read -r -p "› " ans || { echo; return 0; }
         case "${ans//[$'\n\r\t ']/}" in
             1) bash "$CHAT" --no-menu ;;   # AI is already shown above; /menu inside chat switches it
-            2) start_bubble ;;
-            3) stop_bubble ;;
+            2) if [ "$IS_TERMUX" = 1 ]; then start_bubble; else echo "  The bubble is Termux-only — use option 1."; fi ;;
+            3) if [ "$IS_TERMUX" = 1 ]; then stop_bubble; else echo "  The bubble is Termux-only — use option 1."; fi ;;
             4) bash "$CHAT" --setup ;;
             5) do_update ;;
-            6) if autostart_on_p; then autostart off; else autostart on; fi ;;
+            6) if [ "$IS_TERMUX" = 1 ]; then if autostart_on_p; then autostart off; else autostart on; fi; else echo "  Autostart is Termux-only."; fi ;;
             s|S) if [ "$AUTO" = 1 ]; then return 1; else echo "  Pick 1-6 or q."; fi ;;
             q|Q) return 0 ;;
             "") ;;
