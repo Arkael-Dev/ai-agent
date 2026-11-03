@@ -121,7 +121,7 @@ menu() {
         fi
         read -r -p "› " ans || { echo; return 0; }
         case "${ans//[$'\n\r\t ']/}" in
-            1) bash "$CHAT" ;;
+            1) bash "$CHAT" --no-menu ;;   # AI is already shown above; /menu inside chat switches it
             2) start_bubble ;;
             3) stop_bubble ;;
             4) bash "$CHAT" --setup ;;

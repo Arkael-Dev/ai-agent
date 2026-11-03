@@ -81,6 +81,13 @@ provider_model() {
         *)          echo "${AI_MODEL:-}" ;;
     esac
 }
+# Models that must always be selectable, even if the provider's /models list
+# is short, filtered, or fails to load.
+provider_presets() {
+    case "$1" in
+        deepseek) printf '%s\n' deepseek-flash deepseek-v4-pro ;;
+    esac
+}
 provider_label() {
     case "$1" in
         deepseek) echo "DeepSeek" ;; openai) echo "OpenAI" ;; gemini) echo "Gemini" ;;
@@ -237,6 +244,7 @@ fetch_models() {   # fills MODEL_LIST from the provider's /models endpoint
         | sed 's#^models/##' \
         | grep -viE 'embed|whisper|tts|dall-e|moderation|transcribe|realtime|audio|image|guard' \
         | sort -u)"
+    list="$( { provider_presets "$PROVIDER"; printf '%s\n' "$list"; } | awk 'NF && !seen[$0]++')"
     [ -z "$list" ] && return 1
     mapfile -t MODEL_LIST <<<"$list"
     MODEL_LIST_FOR="$PROVIDER"
@@ -394,12 +402,18 @@ main_menu() {
                 verify_and_save || API_KEY="$o_k" ;;
             *[!0-9]*)
                 case " $KNOWN_PROVIDERS " in
-                    *" ${ans,,} "*) setup_provider "${ans,,}" ;;
+                    *" ${ans,,} "*)
+                        if [ "${ans,,}" = "$PROVIDER" ] && { [ "$PROVIDER" = ollama ] || [ -n "$API_KEY" ]; }; then return 0; fi
+                        setup_provider "${ans,,}" ;;
                     *) echo "  Unknown choice." ;;
                 esac ;;
             *)
                 i=$((10#$ans))
-                if [ "$i" -ge 1 ] && [ "$i" -le "${#list[@]}" ]; then setup_provider "${list[$((i-1))]}"
+                if [ "$i" -ge 1 ] && [ "$i" -le "${#list[@]}" ]; then
+                    p="${list[$((i-1))]}"
+                    # already the current AI with a saved key: just go (use k / m to change key or model)
+                    if [ "$p" = "$PROVIDER" ] && { [ "$p" = ollama ] || [ -n "$API_KEY" ]; }; then return 0; fi
+                    setup_provider "$p"
                 else echo "  No such number."; fi ;;
         esac
     done
