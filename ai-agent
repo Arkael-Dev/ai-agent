@@ -1,0 +1,129 @@
+#!/data/data/com.termux/files/usr/bin/bash
+set -u
+
+# ai — one command for everything. Installed as `ai` by install.sh.
+#   ai                 menu (chat / bubble / settings / update)
+#   ai chat            chat in the terminal
+#   ai bubble          start the floating bubble (GUI)
+#   ai stop            stop the bubble
+#   ai setup           choose AI, API key and model
+#   ai update          git pull
+#   ai autostart on|off   show this menu whenever Termux opens
+#   ai "question"      one-shot answer
+
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+DIR="$(dirname "$SELF")"
+CHAT="$DIR/ai-agent-chat.sh"
+BUBBLE="$DIR/ai-agent-bubble.sh"
+CONFIG_DIR="${AI_CONFIG_DIR:-$HOME/.config/ai-agent}"
+LOG="$CONFIG_DIR/bubble.log"
+MARK_BEGIN="# >>> ai-agent autostart >>>"
+MARK_END="# <<< ai-agent autostart <<<"
+
+if [ -t 1 ]; then C_ACC=$'\e[38;5;204m'; C_DIM=$'\e[2m'; C_RST=$'\e[0m'; else C_ACC=""; C_DIM=""; C_RST=""; fi
+
+cfg_get() { grep -m1 "^$1=" "$CONFIG_DIR/config" 2>/dev/null | cut -d= -f2-; }
+keyvar() {
+    case "$1" in
+        deepseek) echo DEEPSEEK_API_KEY ;; openai) echo OPENAI_API_KEY ;;
+        gemini) echo GEMINI_API_KEY ;; claude) echo ANTHROPIC_API_KEY ;;
+        openrouter) echo OPENROUTER_API_KEY ;; groq) echo GROQ_API_KEY ;;
+        *) echo AI_API_KEY ;;
+    esac
+}
+bubble_running() { pgrep -f 'ai-agent-bubble\.sh' >/dev/null 2>&1; }
+rc_files() { for f in "$HOME/.zshrc" "$HOME/.bashrc"; do [ -f "$f" ] && echo "$f"; done; }
+autostart_on_p() { local f; for f in $(rc_files); do grep -qF "$MARK_BEGIN" "$f" && return 0; done; return 1; }
+
+autostart() {
+    local f
+    case "${1:-}" in
+        on)
+            [ -f "$HOME/.bashrc" ] || touch "$HOME/.bashrc"
+            for f in $(rc_files); do
+                grep -qF "$MARK_BEGIN" "$f" && continue
+                printf '\n%s\n[ -t 0 ] && [ -t 1 ] && [ -z "${AI_AGENT_SKIP:-}" ] && command -v ai >/dev/null 2>&1 && ai\n%s\n' \
+                    "$MARK_BEGIN" "$MARK_END" >> "$f"
+            done
+            echo "Menu will open whenever Termux starts. Turn off: ai autostart off" ;;
+        off)
+            for f in $(rc_files); do sed -i "\|$MARK_BEGIN|,\|$MARK_END|d" "$f"; done
+            echo "Autostart off." ;;
+        *) echo "Use: ai autostart on|off"; return 1 ;;
+    esac
+}
+
+start_bubble() {
+    if ! command -v tgui-bash >/dev/null 2>&1; then
+        echo "The bubble needs termux-gui-bash:  pkg install termux-gui-bash"; return 1
+    fi
+    if bubble_running; then echo "Bubble is already running."; return 0; fi
+    mkdir -p "$CONFIG_DIR"
+    nohup "$BUBBLE" >"$LOG" 2>&1 </dev/null &
+    disown 2>/dev/null
+    sleep 2
+    if bubble_running; then
+        echo "${C_ACC}⚡${C_RST} Bubble is running — look at your screen. (Stop: ai stop)"
+    else
+        echo "The bubble stopped right away. Log:"; tail -n 8 "$LOG" 2>/dev/null
+    fi
+}
+stop_bubble() {
+    if bubble_running; then pkill -f 'ai-agent-bubble\.sh'; echo "Bubble stopped."; else echo "Bubble is not running."; fi
+}
+do_update() {
+    if [ -d "$DIR/.git" ]; then git -C "$DIR" pull --ff-only && echo "Updated."; else echo "Not a git checkout: $DIR"; fi
+}
+
+status_line() {
+    local prov model key kv bub auto
+    prov="$(cfg_get AI_PROVIDER)"; prov="${prov:-deepseek}"
+    model="$(cfg_get "MODEL_$prov")"; model="${model:-default}"
+    if [ "$prov" = ollama ]; then key="local"
+    else kv="$(keyvar "$prov")"; if [ -n "$(cfg_get "$kv")" ]; then key="key ✓"; else key="NO KEY — use option 4"; fi; fi
+    bubble_running && bub="running ●" || bub="stopped"
+    echo " AI: ${C_ACC}$prov${C_RST} · $model · $key"
+    echo " Bubble: $bub"
+}
+
+menu() {
+    local ans a
+    while :; do
+        echo
+        echo "${C_ACC}⚡ AI Agent${C_RST}"
+        status_line
+        echo
+        echo "  1) Chat in terminal"
+        echo "  2) Start floating bubble (GUI)"
+        echo "  3) Stop bubble"
+        echo "  4) Choose AI / API key / model"
+        echo "  5) Update"
+        autostart_on_p && a="ON" || a="OFF"
+        echo "  6) Open this menu when Termux starts: $a"
+        echo "  q) Quit"
+        read -r -p "› " ans || { echo; return 0; }
+        case "${ans//[$'\n\r\t ']/}" in
+            1) bash "$CHAT" ;;
+            2) start_bubble ;;
+            3) stop_bubble ;;
+            4) bash "$CHAT" --setup ;;
+            5) do_update ;;
+            6) if autostart_on_p; then autostart off; else autostart on; fi ;;
+            q|Q) return 0 ;;
+            "") ;;
+            *) echo "  Pick 1-6 or q." ;;
+        esac
+    done
+}
+
+case "${1:-}" in
+    "")        menu ;;
+    chat)      shift; exec bash "$CHAT" "$@" ;;
+    bubble)    start_bubble ;;
+    stop)      stop_bubble ;;
+    setup)     exec bash "$CHAT" --setup ;;
+    update)    do_update ;;
+    autostart) autostart "${2:-}" ;;
+    -h|--help|help) sed -n '3,12p' "$SELF" | sed 's/^# \{0,1\}//' ;;
+    *)         exec bash "$CHAT" "$@" ;;     # ai "question" -> one-shot
+esac

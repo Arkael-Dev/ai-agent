@@ -13,13 +13,14 @@ set -u
 # In chat: /help /menu /key /models /model /provider /reset /confirm /exit
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
-CLI_PROVIDER=""; CLI_MODEL=""; NEW=0; NO_MENU=0; ARGS=()
+CLI_PROVIDER=""; CLI_MODEL=""; NEW=0; NO_MENU=0; SETUP_ONLY=0; ARGS=()
 
 usage() {
     cat <<'HELP'
-Usage: ai-agent-chat.sh [--provider NAME] [--model ID] [--new] [--no-menu] [text...]
+Usage: ai-agent-chat.sh [--provider NAME] [--model ID] [--new] [--no-menu] [--setup] [text...]
   no text, terminal   start menu (pick AI, API key, model), then chat
   --no-menu           skip the start menu and use the saved provider/model
+  --setup             only open the AI menu (provider, key, model), then exit
   text or piped stdin one-shot answer, then exit
   --new               start with an empty conversation
 Providers: deepseek openai gemini claude openrouter groq ollama custom
@@ -32,6 +33,7 @@ while [ $# -gt 0 ]; do
         --model)    CLI_MODEL="${2:-}"; shift; [ $# -gt 0 ] && shift ;;
         --new)      NEW=1; shift ;;
         --no-menu)  NO_MENU=1; shift ;;
+        --setup)    SETUP_ONLY=1; shift ;;
         -h|--help)  usage; exit 0 ;;
         --)         shift; ARGS+=("$@"); break ;;
         -*)         echo "Unknown option: $1 (try --help)" >&2; exit 1 ;;
@@ -572,6 +574,8 @@ agent() {   # $1 = user text
 }
 
 # ── One-shot mode: text arguments and/or piped stdin ─────────────────────────
+if [ "$SETUP_ONLY" = 1 ]; then main_menu inchat; exit 0; fi
+
 HAS_STDIN=0; { [ -p /dev/stdin ] || [ -f /dev/stdin ]; } && HAS_STDIN=1
 if [ ${#ARGS[@]} -gt 0 ] || [ "$HAS_STDIN" = 1 ]; then
     q="${ARGS[*]:-}"

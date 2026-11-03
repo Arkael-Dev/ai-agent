@@ -56,6 +56,36 @@ pkg update && pkg install termux-gui-bash jq curl termux-api git
 
 Aktifkan izin **Tampilkan di atas aplikasi lain** untuk Termux:GUI (Setelan > Aplikasi > Termux:GUI).
 
+## Mulai cepat (disarankan)
+
+```
+git clone https://github.com/Arkael-Dev/ai-agent
+cd ai-agent
+bash install.sh
+```
+
+`install.sh` memasang paket yang dibutuhkan, membuat perintah **`ai`**, dan bisa membuka menu otomatis setiap kali Termux dibuka. Setelah itu cukup ketik:
+
+```
+ai
+```
+
+```
+⚡ AI Agent
+ AI: openai · gpt-4o-mini · key ✓
+ Bubble: stopped
+
+  1) Chat in terminal
+  2) Start floating bubble (GUI)
+  3) Stop bubble
+  4) Choose AI / API key / model
+  5) Update
+  6) Open this menu when Termux starts: ON
+  q) Quit
+```
+
+Pintasan: `ai chat`, `ai bubble`, `ai stop`, `ai setup`, `ai update`, `ai autostart on|off`, atau `ai "pertanyaanmu"` untuk satu jawaban langsung.
+
 ## Instalasi
 
 ```
