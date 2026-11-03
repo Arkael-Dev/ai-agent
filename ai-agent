@@ -1,19 +1,19 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 # Based on ExTV/termux-bubble (https://github.com/ExTV/termux-bubble), GPL-3.0.
 # Original author: ExTV. Modified by Arkael-Dev.
 set -u
 
 # ai — one command for everything. Installed as `ai` by install.sh.
-#   ai                 menu (chat / bubble / settings / update)
+#   ai                 GUI menu on a desktop, plain-text menu in a bare terminal
+#   ai gui             force the graphical menu
 #   ai chat            chat in the terminal
-#   ai bubble          start the floating bubble (GUI, Termux only)
-#   ai stop            stop the bubble
 #   ai setup           choose AI, API key and model
 #   ai update          git pull
-#   ai autostart on|off   open this menu on every new Termux session
 #   ai "question"      one-shot answer
+#
+# The Android/Termux floating bubble is not part of this branch: on a desktop
+# you get a real dialog window, in SSH/tty you get the same menu drawn as text.
 
-# portable realpath: `readlink -f` is GNU-only, macOS/BSD lack it
 resolve_path() {
     local p="$1" d
     while [ -L "$p" ]; do
@@ -27,16 +27,14 @@ resolve_path() {
 SELF="$(resolve_path "${BASH_SOURCE[0]}")"
 DIR="$(dirname "$SELF")"
 CHAT="$DIR/ai-agent-chat.sh"
-# The bubble and the Termux autostart hook only exist on Android/Termux.
-if [ -n "${TERMUX_VERSION:-}" ] && [ -n "${PREFIX:-}" ]; then IS_TERMUX=1; else IS_TERMUX=0; fi
+# Platform: termux (bubble era, not used here) / linux / macos / other
+if [ -n "${TERMUX_VERSION:-}" ] && [ -n "${PREFIX:-}" ]; then PLATFORM=termux
+elif [ "$(uname -s 2>/dev/null)" = Darwin ]; then PLATFORM=macos
+elif [ -r /etc/os-release ] || [ "$(uname -s 2>/dev/null)" = Linux ]; then PLATFORM=linux
+else PLATFORM=other; fi
 
-BUBBLE="$DIR/ai-agent-bubble.sh"
 CONFIG_DIR="${AI_CONFIG_DIR:-$HOME/.config/ai-agent}"
-LOG="$CONFIG_DIR/bubble.log"
-MARK_BEGIN="# >>> ai-agent autostart >>>"
-MARK_END="# <<< ai-agent autostart <<<"
-
-if [ -t 1 ]; then C_ACC=$'\e[38;5;204m'; C_DIM=$'\e[2m'; C_RST=$'\e[0m'; else C_ACC=""; C_DIM=""; C_RST=""; fi
+GUI_LOG="$CONFIG_DIR/gui.log"
 
 cfg_get() { grep -m1 "^$1=" "$CONFIG_DIR/config" 2>/dev/null | cut -d= -f2-; }
 keyvar() {
@@ -47,127 +45,165 @@ keyvar() {
         *) echo AI_API_KEY ;;
     esac
 }
-bubble_running() { pgrep -f 'ai-agent-bubble\.sh' >/dev/null 2>&1; }
-rc_files() { for f in "$HOME/.zshrc" "$HOME/.bashrc"; do [ -f "$f" ] && echo "$f"; done; }
-autostart_on_p() { local f; for f in $(rc_files); do grep -qF "$MARK_BEGIN" "$f" && return 0; done; return 1; }
 
-AUTO_LINE='[ -t 0 ] && [ -t 1 ] && [ -z "${AI_AGENT_SKIP:-}" ] && command -v ai >/dev/null 2>&1 && ai --auto && exit'
-# GNU sed accepts `-i`, BSD/macOS requires `-i ''`; detect once and reuse.
-if sed --version >/dev/null 2>&1; then SED_INPLACE=(sed -i); else SED_INPLACE=(sed -i ''); fi
-autostart_strip() { local f; for f in $(rc_files); do "${SED_INPLACE[@]}" "\|$MARK_BEGIN|,\|$MARK_END|d" "$f"; done; }
-autostart_write() {
-    local f
-    [ -f "$HOME/.bashrc" ] || touch "$HOME/.bashrc"
-    for f in $(rc_files); do
-        printf '\n%s\n%s\n%s\n' "$MARK_BEGIN" "$AUTO_LINE" "$MARK_END" >> "$f"
-    done
-}
-# old installs wrote a block without "--auto"; upgrade it in place
-autostart_migrate() {
-    local f
-    autostart_on_p || return 0
-    for f in $(rc_files); do
-        grep -qF "$MARK_BEGIN" "$f" && ! grep -qF 'ai --auto' "$f" && { autostart_strip; autostart_write; return 0; }
-    done
+# ── is there a desktop to draw on? ──────────────────────────────────────────
+have_gui() {
+    [ -n "${AI_NO_GUI:-}" ] && return 1
+    # a terminal inside $DISPLAY still counts: dialog needs the X connection
+    if [ "$PLATFORM" = macos ]; then
+        command -v osascript >/dev/null 2>&1 && return 0
+        return 1
+    fi
+    if [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then return 1; fi
+    command -v dialog >/dev/null 2>&1 && return 0
+    command -v whiptail >/dev/null 2>&1 && return 0
+    return 1
 }
 
-autostart() {
-    case "${1:-}" in
-        on)  autostart_strip; autostart_write
-             echo "Menu will open on every new Termux session. q closes the session, s keeps the shell. Turn off: ai autostart off" ;;
-        off) autostart_strip; echo "Autostart off." ;;
-        *)   echo "Use: ai autostart on|off"; return 1 ;;
+# which dialog implementation do we have?
+DIALOG=""
+dialog_bin() {
+    [ -n "$DIALOG" ] && { echo "$DIALOG"; return; }
+    if command -v dialog >/dev/null 2>&1; then DIALOG=dialog
+    elif command -v whiptail >/dev/null 2>&1; then DIALOG=whiptail
+    else return 1; fi
+    echo "$DIALOG"
+}
+
+# terminal emulators we can open a GUI chat window in
+terminal_bin() {
+    local t
+    for t in x-terminal-emulator gnome-terminal konsole xfce4-terminal \
+             alacritty kitty foot tilix terminator lxterminal mate-terminal \
+             xterm urxvt st wezterm; do
+        command -v "$t" >/dev/null 2>&1 && { echo "$t"; return 0; }
+    done
+    return 1
+}
+
+# open $1... (a command) in a new terminal window; falls back to the current tty
+open_terminal() {
+    local term
+    if [ "$PLATFORM" = macos ]; then
+        osascript -e "tell application \"Terminal\" to do script \"$*\"" >/dev/null 2>&1 && return 0
+    fi
+    term="$(terminal_bin)" || return 1
+    case "$term" in
+        gnome-terminal) exec_nohup "$term" -- bash -lc "$*" ;;
+        konsole)        exec_nohup "$term" -e bash -lc "$*" ;;
+        xfce4-terminal) exec_nohup "$term" -x bash -lc "$*" ;;
+        alacritty)      exec_nohup "$term" -e bash -lc "$*" ;;
+        kitty)          exec_nohup "$term" bash -lc "$*" ;;
+        foot)           exec_nohup "$term" bash -lc "$*" ;;
+        wezterm)        exec_nohup "$term" start -- bash -lc "$*" ;;
+        tilix|terminator) exec_nohup "$term" -e bash -lc "$*" ;;
+        xterm|urxvt|lxterminal|mate-terminal|st|x-terminal-emulator)
+                        exec_nohup "$term" -e bash -lc "$*" ;;
+        *) return 1 ;;
     esac
 }
-
-start_bubble() {
-    if ! command -v tgui-bash >/dev/null 2>&1; then
-        echo "The bubble needs termux-gui-bash:  pkg install termux-gui-bash"; return 1
-    fi
-    if bubble_running; then echo "Bubble is already running."; return 0; fi
+exec_nohup() {
     mkdir -p "$CONFIG_DIR"
-    nohup "$BUBBLE" >"$LOG" 2>&1 </dev/null &
+    nohup "$@" >>"$GUI_LOG" 2>&1 </dev/null &
     disown 2>/dev/null
-    sleep 2
-    if bubble_running; then
-        echo "${C_ACC}⚡${C_RST} Bubble is running — look at your screen. (Stop: ai stop)"
-    else
-        echo "The bubble stopped right away. Log:"; tail -n 8 "$LOG" 2>/dev/null
-    fi
 }
-stop_bubble() {
-    if bubble_running; then pkill -f 'ai-agent-bubble\.sh'; echo "Bubble stopped."; else echo "Bubble is not running."; fi
+
+status_text() {
+    local prov model key kv host
+    prov="$(cfg_get AI_PROVIDER)"; prov="${prov:-deepseek}"
+    model="$(cfg_get "MODEL_$prov")"; model="${model:-default}"
+    if [ "$prov" = ollama ]; then key="local"
+    else kv="$(keyvar "$prov")"; if [ -n "$(cfg_get "$kv")" ]; then key="key ✓"; else key="NO KEY — choose option 4"; fi; fi
+    host="$(. /etc/os-release 2>/dev/null; echo "${PRETTY_NAME:-$(uname -s)}")"
+    printf 'AI: %s · %s · %s\nHost: %s' "$prov" "$model" "$key" "$host"
 }
+
 do_update() {
     if [ -d "$DIR/.git" ]; then git -C "$DIR" pull --ff-only && echo "Updated."; else echo "Not a git checkout: $DIR"; fi
 }
 
-status_line() {
-    local prov model key kv bub auto
-    prov="$(cfg_get AI_PROVIDER)"; prov="${prov:-deepseek}"
-    model="$(cfg_get "MODEL_$prov")"; model="${model:-default}"
-    if [ "$prov" = ollama ]; then key="local"
-    else kv="$(keyvar "$prov")"; if [ -n "$(cfg_get "$kv")" ]; then key="key ✓"; else key="NO KEY — use option 4"; fi; fi
-    echo " AI: ${C_ACC}$prov${C_RST} · $model · $key"
-    if [ "$IS_TERMUX" = 1 ]; then
-        bubble_running && bub="running ●" || bub="stopped"
-        echo " Bubble: $bub"
-    else
-        echo " Host: $(. /etc/os-release 2>/dev/null; echo "${PRETTY_NAME:-$(uname -s)}")"
-    fi
-}
-
-AUTO=0
-menu() {
-    local ans a
-    autostart_migrate
+# ── GUI menu (dialog / whiptail) ────────────────────────────────────────────
+gui_menu() {
+    local d ans rc
+    d="$(dialog_bin)" || return 1
     while :; do
-        echo
-        echo "${C_ACC}⚡ AI Agent${C_RST}"
-        status_line
-        echo
-        echo "  1) Chat in terminal"
-        if [ "$IS_TERMUX" = 1 ]; then
-            echo "  2) Start floating bubble (GUI)"
-            echo "  3) Stop bubble"
-        fi
-        echo "  4) Choose AI / API key / model"
-        echo "  5) Update"
-        if [ "$IS_TERMUX" = 1 ]; then
-            autostart_on_p && a="ON" || a="OFF"
-            echo "  6) Open this menu when Termux starts: $a"
-        fi
-        if [ "$AUTO" = 1 ]; then
-            echo "  s) Shell (stay in Termux)"
-            echo "  q) Quit (close this session)"
-        else
-            echo "  q) Quit"
-        fi
-        read -r -p "› " ans || { echo; return 0; }
-        case "${ans//[$'\n\r\t ']/}" in
-            1) bash "$CHAT" --no-menu ;;   # AI is already shown above; /menu inside chat switches it
-            2) if [ "$IS_TERMUX" = 1 ]; then start_bubble; else echo "  The bubble is Termux-only — use option 1."; fi ;;
-            3) if [ "$IS_TERMUX" = 1 ]; then stop_bubble; else echo "  The bubble is Termux-only — use option 1."; fi ;;
-            4) bash "$CHAT" --setup ;;
-            5) do_update ;;
-            6) if [ "$IS_TERMUX" = 1 ]; then if autostart_on_p; then autostart off; else autostart on; fi; else echo "  Autostart is Termux-only."; fi ;;
-            s|S) if [ "$AUTO" = 1 ]; then return 1; else echo "  Pick 1-6 or q."; fi ;;
-            q|Q) return 0 ;;
-            "") ;;
-            *) echo "  Pick 1-6 or q." ;;
+        # dialog writes the choice to stderr and the UI to stdout
+        # (the classic 3>&1 1>&2 2>&3 swap breaks on Termux, so swap explicitly)
+        ans="$("$d" --title "AI Agent" --backtitle "$(status_text | tr '\n' ' ')" \
+                 --menu "Choose an action" 16 62 6 \
+                 1 "Chat in a new terminal window" \
+                 2 "Chat in this terminal" \
+                 3 "Choose AI / API key / model" \
+                 4 "Update" \
+                 5 "Close" 3>&1 1>&3- 2>&1)"
+        rc=$?
+        [ $rc -ne 0 ] && return 0            # Esc / Cancel
+        ans="$(printf '%s\n' "$ans" | tail -n1)"   # drop any UI text, keep the tag
+        case "$ans" in
+            1) open_terminal "bash '$CHAT' --no-menu" \
+                 || "$d" --title "AI Agent" --msgbox "No terminal emulator found.\nUse 'Chat in this terminal' instead." 8 60 ;;
+            2) return 2 ;;                    # caller takes over the tty
+            3) bash "$CHAT" --setup ;;
+            4) do_update | { "$d" --title "Update" --programbox 10 62; } ;;
+            5) return 0 ;;
         esac
     done
 }
 
+# ── text menu (SSH, tty, no X) ──────────────────────────────────────────────
+if [ -t 1 ]; then C_ACC=$'\e[38;5;204m'; C_RST=$'\e[0m'; else C_ACC=""; C_RST=""; fi
+
+text_menu() {
+    local ans
+    while :; do
+        echo
+        echo "${C_ACC}⚡ AI Agent${C_RST}"
+        status_text | sed 's/^/ /'
+        echo
+        echo "  1) Chat in terminal"
+        echo "  4) Choose AI / API key / model"
+        echo "  5) Update"
+        echo "  q) Quit"
+        read -r -p "› " ans || { echo; return 0; }
+        case "${ans//[$'\n\r\t ']/}" in
+            1) bash "$CHAT" --no-menu ;;
+            4) bash "$CHAT" --setup ;;
+            5) do_update ;;
+            q|Q) return 0 ;;
+            "") ;;
+            *) echo "  Pick 1, 4, 5 or q." ;;
+        esac
+    done
+}
+
+FORCE_GUI=0
+menu() {
+    if [ "$FORCE_GUI" = 1 ] || have_gui; then
+        gui_menu; local r=$?
+        [ $r -eq 2 ] && bash "$CHAT" --no-menu
+        return 0
+    fi
+    text_menu
+}
+
 case "${1:-}" in
     "")        menu ;;
-    --auto)    AUTO=1; menu ;;     # used by autostart: q -> exit 0 (closes session), s -> exit 1 (keeps shell)
+    gui)       FORCE_GUI=1; menu ;;
     chat)      shift; exec bash "$CHAT" "$@" ;;
-    bubble)    start_bubble ;;
-    stop)      stop_bubble ;;
     setup)     exec bash "$CHAT" --setup ;;
     update)    do_update ;;
-    autostart) autostart "${2:-}" ;;
-    -h|--help|help) sed -n '3,12p' "$SELF" | sed 's/^# \{0,1\}//' ;;
-    *)         exec bash "$CHAT" "$@" ;;     # ai "question" -> one-shot
+    doctor)
+        echo "ai-agent — environment check"
+        echo "platform : $PLATFORM"
+        echo "shell    : $BASH_VERSION"
+        echo "config   : $CONFIG_DIR"
+        if have_gui; then echo "gui      : yes ($(dialog_bin))"; else echo "gui      : no (text menu)"; fi
+        if t="$(terminal_bin)"; then echo "terminal : $t"; else echo "terminal : none found"; fi
+        for c in bash curl jq sed; do
+            if command -v "$c" >/dev/null 2>&1; then printf '  %-8s ok   %s\n' "$c" "$(command -v "$c")"; else printf '  %-8s MISSING\n' "$c"; fi
+        done
+        ;;
+    bubble|stop) echo "The floating bubble is Termux-only; this build has a GUI dialog instead. Run: ai" ;;
+    -h|--help|help) sed -n '5,13p' "$SELF" | sed 's/^# \{0,1\}//' ;;
+    *)         exec bash "$CHAT" "$@" ;;
 esac

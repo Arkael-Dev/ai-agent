@@ -59,7 +59,6 @@ fi
 
 # ── launcher ────────────────────────────────────────────────────────────────
 chmod +x "$DIR/ai-agent" "$DIR/ai-agent-chat.sh" 2>/dev/null || true
-[ -f "$DIR/ai-agent-bubble.sh" ] && chmod +x "$DIR/ai-agent-bubble.sh" 2>/dev/null || true
 ln -sf "$DIR/ai-agent" "$BIN/ai"
 echo "✓ Command installed: $BIN/ai"
 case ":$PATH:" in

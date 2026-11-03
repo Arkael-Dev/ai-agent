@@ -12,7 +12,7 @@ Jalan di **Arch, Debian/Ubuntu, Fedora, openSUSE, Alpine, WSL, dan macOS**, term
 - **Bawa API key sendiri (BYOK).** Tidak ada key di repo ini dan tidak ada server perantara. Key-mu tetap di mesinmu dan hanya dikirim ke provider yang kamu pilih.
 - **AI yang bekerja, bukan cuma ngobrol.** Model bisa membaca file, menjalankan program, mengambil data, dan memperbaiki sesuatu di sistemmu lewat tool `run_bash`.
 - **Ringan, murni Bash.** Cuma butuh `bash`, `curl`, dan `jq` — tanpa Python, Node, atau Docker.
-- **Terminal first.** Tanpa GUI, tanpa overlay, tanpa sesi desktop. Jalan lewat SSH, di pane tmux, atau di server headless.
+- **Jalan dengan atau tanpa desktop.** Di desktop, `ai` membuka menu GUI kecil (via `dialog`/`whiptail`); lewat SSH, di pane tmux, atau di server headless menu yang sama dicetak sebagai teks. Tidak butuh sesi desktop.
 
 ## Provider yang didukung
 
@@ -94,6 +94,35 @@ chmod +x ai-agent-chat.sh ai-agent
 ```
 
 Saat pertama dijalankan kamu akan diminta **provider**, **API key**, dan **model**. Key dan model dicek dengan request kecil sebelum disimpan.
+
+## Menu GUI di desktop
+
+Jalankan `ai` (atau `./ai-agent`) dan Anda mendapat jendela kecil, bukan prompt:
+
+```
+┌─ AI Agent ──────────────────────────────┐
+│ AI: deepseek · deepseek-flash · key ✓   │
+│                                         │
+│  1  Chat di window terminal baru        │
+│  2  Chat di terminal ini                │
+│  3  Pilih AI / API key / model          │
+│  4  Update                              │
+│  5  Tutup                               │
+└─────────────────────────────────────────┘
+```
+
+- **Chat di window baru** membuka chat di emulator terminal baru (gnome-terminal,
+  konsole, xfce4-terminal, alacritty, kitty, foot, xterm, …); di macOS memakai
+  Terminal.app. Bila tidak ada emulator, disarankan memakai opsi 2.
+- **Chat di terminal ini** memakai window yang sekarang.
+- Tanpa desktop (`$DISPLAY`/`$WAYLAND_DISPLAY` kosong) atau `AI_NO_GUI=1`, menu
+  yang sama dicetak sebagai teks — SSH dan tty tetap berjalan seperti biasa.
+- `ai gui` memaksa jendela, `ai doctor` menampilkan apakah GUI dan emulator
+  terminal terdeteksi.
+
+```
+sudo pacman -S dialog      # atau: apt install dialog / dnf install dialog
+```
 
 ## Chat di terminal
 
@@ -235,4 +264,4 @@ GPL-3.0, lihat [LICENSE](LICENSE).
 - **Pembuat asli:** [ExTV](https://github.com/ExTV), pembuat [ExTV/termux-bubble](https://github.com/ExTV/termux-bubble) yang menjadi dasar proyek ini.
 - **Dimodifikasi oleh:** [Arkael-Dev](https://github.com/Arkael-Dev): dukungan banyak provider, chat terminal, dukungan Linux/macOS portabel, launcher `ai` dan installer, serta perubahan lainnya.
 
-Terima kasih kepada ExTV dan pembuat Termux serta Termux:GUI.
+Terima kasih kepada ExTV (pembuat termux-bubble) dan para pengembang Termux.

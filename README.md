@@ -12,7 +12,7 @@ Works on **Arch, Debian/Ubuntu, Fedora, openSUSE, Alpine, WSL, and macOS**, incl
 - **Bring your own key (BYOK).** No keys live in this repo and there is no middleman server. Your key stays on your machine and is sent only to the provider you choose.
 - **An AI that works, not just chats.** The model can read files, run programs, fetch data, and fix things on your system through the `run_bash` tool.
 - **Lightweight, pure Bash.** Needs only `bash`, `curl`, and `jq` — no Python, Node, or Docker.
-- **Terminal first.** No GUI, no overlay, no desktop session required. It works over SSH, in a tmux pane, or on a headless server.
+- **Works with or without a desktop.** On a desktop `ai` opens a small GUI menu (via `dialog`/`whiptail`); over SSH, in a tmux pane or on a headless server the same menu is drawn in plain text. No desktop session required.
 
 ## Supported providers
 
@@ -94,6 +94,37 @@ chmod +x ai-agent-chat.sh ai-agent
 ```
 
 On first run you are asked for a **provider**, an **API key**, and a **model**. The key and model are checked with a tiny test request before they are saved.
+
+## GUI menu on a desktop
+
+Run `ai` (or `./ai-agent`) and you get a small window instead of a prompt:
+
+```
+┌─ AI Agent ──────────────────────────────┐
+│ AI: deepseek · deepseek-flash · key ✓   │
+│                                         │
+│  1  Chat in a new terminal window       │
+│  2  Chat in this terminal               │
+│  3  Choose AI / API key / model         │
+│  4  Update                              │
+│  5  Close                               │
+└─────────────────────────────────────────┘
+```
+
+- **Chat in a new terminal window** opens your chat in a fresh terminal emulator
+  (gnome-terminal, konsole, xfce4-terminal, alacritty, kitty, foot, xterm, …);
+  on macOS it opens Terminal.app. If none is found it tells you to use option 2.
+- **Chat in this terminal** hands the current window to the chat.
+- No desktop (`$DISPLAY`/`$WAYLAND_DISPLAY` unset) or `AI_NO_GUI=1` → the same
+  menu is printed as text, so SSH and tty sessions keep working unchanged.
+- `ai gui` forces the window, `ai doctor` shows whether the GUI and a terminal
+  emulator were detected.
+
+```
+sudo pacman -S dialog      # or: apt install dialog / dnf install dialog
+```
+
+Related commands: `ai` · `ai chat` · `ai setup` · `ai update` · `ai doctor` · `ai --help`
 
 ## Terminal chat
 
@@ -235,4 +266,4 @@ GPL-3.0, see [LICENSE](LICENSE).
 - **Original author:** [ExTV](https://github.com/ExTV), creator of [ExTV/termux-bubble](https://github.com/ExTV/termux-bubble), which this project is based on.
 - **Modified by:** [Arkael-Dev](https://github.com/Arkael-Dev): multi-provider support, terminal chat, portable Linux/macOS support, the `ai` launcher and installer, and other changes.
 
-Thanks to ExTV and to the authors of Termux and Termux:GUI.
+Thanks to ExTV (author of termux-bubble) and to the Termux developers.

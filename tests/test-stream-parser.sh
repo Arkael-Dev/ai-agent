@@ -2,7 +2,8 @@
 # Offline test for the SSE parser block in ai-agent-bubble.sh (no network).
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
-SCRIPT="${1:-$HERE/../ai-agent-bubble.sh}"
+SCRIPT="${1:-$HERE/../ai-agent-bubble.sh}"   # the bubble is the only chat with a testable stream block
+if [ ! -f "$SCRIPT" ]; then echo "SKIP: $SCRIPT not present (bubble not in this build)"; exit 0; fi
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/streamtest.XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT
 aid=0; answer=0; TRANSCRIPT_PRE="PRE|"

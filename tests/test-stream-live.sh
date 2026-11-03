@@ -2,7 +2,8 @@
 # Live test of api_stream_post against a local mock SSE endpoint (no real API).
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
-SCRIPT="${1:-$HERE/../ai-agent-bubble.sh}"
+SCRIPT="${1:-$HERE/../ai-agent-bubble.sh}"   # the bubble is the only chat with a testable stream block
+if [ ! -f "$SCRIPT" ]; then echo "SKIP: $SCRIPT not present (bubble not in this build)"; exit 0; fi
 PORT=8899
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/livesstest.XXXXXX")"
 SRV_PID=""
