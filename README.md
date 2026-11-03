@@ -1,88 +1,174 @@
-# ⚡ DeepSeek Bubble
+# ⚡ AI Bubble — a floating AI assistant for Android (Termux)
 
-A floating AI assistant for Android, running entirely in Termux. A tiny draggable
-bubble sits over every app; tap it for clipboard quick‑actions (translate, summarize,
-explain, fix, reply) and an **agentic chat** where DeepSeek can run shell commands on
-your device to actually get things done.
+🌐 **English** · [Bahasa Indonesia](README.id.md)
+
+> A floating, agentic AI assistant that overlays every Android app. Bring your own API key: DeepSeek (default), OpenAI, Gemini, Claude, OpenRouter, Groq, or a local Ollama model. Pure Termux + Termux:GUI bash.
+
+A small draggable bubble floats over every app. Tap it to open a panel with **clipboard quick-actions** (translate, summarize, explain, fix, reply) and an **agentic chat** where the model can run shell commands on your phone to actually get things done.
+
+## Purpose
+
+- **One bubble, many AIs.** Not locked to a single vendor. Use DeepSeek, ChatGPT, Gemini, Claude, or a local model through Ollama.
+- **Bring your own key (BYOK).** No keys live in this repo and there is no middleman server. Your key stays on your phone and is sent only to the provider you choose.
+- **An AI that works, not just chats.** The model can read files, run programs, fetch data, and fix things on your device through the `run_bash` tool.
+- **Lightweight, pure Bash.** All you need is Termux, Termux:GUI, `curl`, and `jq`.
+
+This project is derived from [ExTV/termux-bubble](https://github.com/ExTV/termux-bubble) (GPL-3.0), with multi-provider support added.
+
+## Supported providers
+
+All providers use the OpenAI-compatible chat API. DeepSeek remains the **default**.
+
+| Provider | Name (`--provider`) | Key variable | Default model |
+|---|---|---|---|
+| DeepSeek (default) | `deepseek` | `DEEPSEEK_API_KEY` | `deepseek-flash` |
+| OpenAI (ChatGPT) | `openai` | `OPENAI_API_KEY` | `gpt-4o-mini` |
+| Google Gemini | `gemini` | `GEMINI_API_KEY` | `gemini-2.5-flash` |
+| Anthropic Claude | `claude` | `ANTHROPIC_API_KEY` | `claude-sonnet-5-5` |
+| OpenRouter | `openrouter` | `OPENROUTER_API_KEY` | `openrouter/auto` |
+| Groq | `groq` | `GROQ_API_KEY` | `llama-3.3-70b-versatile` |
+| Ollama (local) | `ollama` | no key needed | `qwen2.5:3b` |
+| Anything else | `custom` | `AI_API_KEY` | set via `AI_MODEL` |
+
+Notes:
+- Default model names may go out of date. If you get a *model not found* error, pass `--model YOUR_MODEL`.
+- Claude's OpenAI-compatible endpoint is experimental, so tool calling may not be perfect.
+- The agentic chat (running commands) needs a model that supports tool calling. Very small local models often fail at this.
 
 ## Requirements
 
-**Three apps** — install all from the GitHub releases (*not* the Play Store builds,
-which are outdated and incompatible):
+Install **three apps** from the **same source** (all from F-Droid, or all from GitHub Releases). Do not mix them: different signing keys make Android refuse to install the plugins.
 
 - [Termux](https://github.com/termux/termux-app/releases)
-- [Termux:GUI](https://github.com/termux/termux-gui/releases) — the overlay engine
-- [Termux:API](https://github.com/termux/termux-api/releases) — clipboard, toast & text‑to‑speech
+- [Termux:GUI](https://github.com/termux/termux-gui/releases), the overlay engine
+- [Termux:API](https://github.com/termux/termux-api/releases), for clipboard, toast, and speech
 
-**Termux packages:**
+Do not use the Play Store builds; they are outdated.
 
-```sh
-pkg install termux-gui-bash jq curl termux-api
+Then, in Termux:
+
+```
+pkg update && pkg install termux-gui-bash jq curl termux-api git
 ```
 
-- `termux-gui-bash` — provides `tgui-bash`, which runs the script (required)
-- `jq`, `curl` — API calls and JSON (required)
-- `termux-api` — bridges to the Termux:API app for clipboard, toast, and speech
+Grant Termux:GUI the **Display over other apps** permission (Settings > Apps > Termux:GUI).
 
-You also need a **DeepSeek API key** from <https://platform.deepseek.com>.
+## Installation
 
-## Setup
+```
+git clone https://github.com/Arkael-Dev/ai-agent
+cd ai-agent
+chmod +x deepseek-bubble.sh
+./deepseek-bubble.sh
+```
 
-1. Clone the repo:
+On first launch the panel asks for an API key. Paste it and tap **Save key**. The key is validated before it is saved.
 
-   ```sh
-   git clone https://github.com/ExTV/termux-bubble
-   cd termux-bubble
-   ```
+## Choosing a provider
 
-2. Grant Termux:GUI the **"Display over other apps"** permission (the script opens this
-   settings screen automatically if it's missing).
-3. Run it:
+Use flags or environment variables:
 
-   ```sh
-   chmod +x deepseek-bubble.sh
-   ./deepseek-bubble.sh
-   ```
+```
+./deepseek-bubble.sh                                    # DeepSeek (default)
+./deepseek-bubble.sh --provider openai                  # ChatGPT
+./deepseek-bubble.sh --provider gemini --model gemini-2.5-pro
+./deepseek-bubble.sh --provider ollama --model qwen2.5:3b
+```
 
-4. On first launch, paste your API key and tap **Save key**. It's stored privately at
-   `~/.config/deepseek-bubble/config` (or set `DEEPSEEK_API_KEY` in the environment to
-   skip this).
+Or pass the key through the environment:
+
+```
+OPENAI_API_KEY="sk-..." ./deepseek-bubble.sh --provider openai
+```
+
+Every key you have saved is kept, so you can switch providers without re-entering anything.
+
+### Ollama (local models)
+
+No key and no internet needed. Make sure the Ollama server is running, then:
+
+```
+./deepseek-bubble.sh --provider ollama --model qwen2.5:3b
+```
+
+If Ollama runs on a PC on the same network, point to it with:
+
+```
+OLLAMA_HOST="http://192.168.1.10:11434" ./deepseek-bubble.sh --provider ollama
+```
+
+Large models are heavy for a phone. On a phone, pick a small model (around 1–3B parameters).
+
+### Custom provider
+
+For any other OpenAI-compatible service:
+
+```
+AI_BASE_URL="https://example.com/v1/chat/completions" AI_API_KEY="..." AI_MODEL="model-name" ./deepseek-bubble.sh --provider custom
+```
 
 ## Usage
 
-- **Drag** the bubble anywhere; **tap** it to open the panel.
-- **Clipboard actions** — copy text, then tap *Trans / Sum / Expl / Fix / Reply*.
-- **Chat** — type a request and **Send**. The model can run bash commands on your phone
-  (read files, fetch things, run programs) to complete the task.
-- While it's working, **Send** turns into **Stop** — tap it to cancel the current run.
-  Collapse, drag, Copy/Speak and quit keep working during a run.
-- **Copy / Speak** the last answer, **Reset** the conversation, **▽** collapse, **✕** quit.
-- **Mic** dictates into the input box (Termux:API speech recognition).
-- **M** switches the model between `deepseek-flash` and `deepseek-v4-pro`.
-- Answers stream in as they are generated, and the console auto-scrolls to the newest line.
-- The conversation is saved to `~/.config/deepseek-bubble/history.json` and restored on the
-  next launch; **Reset** clears it.
+- **Drag** the bubble anywhere, **tap** it to open the panel.
+- **Clipboard actions:** copy text in any app, then tap *Trans / Sum / Expl / Fix / Reply*.
+- **Chat:** type a request and tap **Send**. The model can run bash commands on your phone to complete the task. Tap **Stop** to cancel.
+- **Copy / Speak:** copy or read aloud the last answer. **Mic** for voice input.
+- **Reset** clears the conversation. **▽** collapses the panel. **✕** quits.
+- **M** switches model: for DeepSeek it toggles between `deepseek-flash` and `deepseek-v4-pro`, then moves on to the next provider that has a key.
+
+Command-line options:
+
+| Option | What it does |
+|---|---|
+| `--provider NAME` | Choose the provider |
+| `--model ID` | Choose the model |
+| `--update` | Runs `git pull` to update |
+| `--help` | Show help |
 
 ## Configuration
 
-Everything lives in `~/.config/deepseek-bubble/config` (created on first save, `chmod 600`):
+File: `~/.config/deepseek-bubble/config` (mode `600`, readable only by you).
 
-| Key | Default | Meaning |
-|---|---|---|
-| `DEEPSEEK_API_KEY` | — | your key (an env var of the same name wins) |
-| `DEEPSEEK_MODEL` | `deepseek-flash` | model id; `deepseek-v4-pro` is the bigger one |
-| `DEEPSEEK_API_URL` | `https://api.deepseek.com/chat/completions` | any OpenAI-compatible endpoint |
-| `DEEPSEEK_MAX_TOKENS` | `8000` | output cap per reply |
-| `DEEPSEEK_THINKING` | `off` | `off` (fast, no reasoning pass), `on`, or `default` (server decides; for `deepseek-flash` that currently means **on**, so only `off` changes anything) |
-| `BASH_CONFIRM` | `0` | `1` = risky commands wait for a **Run** tap |
+| Variable | Purpose |
+|---|---|
+| `AI_PROVIDER` | Active provider |
+| `AI_MODEL` | Model to use (overrides the default) |
+| `AI_BASE_URL` | Endpoint URL for the `custom` provider |
+| `OLLAMA_HOST` | Address of the Ollama server |
+| `DEEPSEEK_THINKING` | `off` (fast, default), `on`, or `default` (DeepSeek only) |
+| `DEEPSEEK_MAX_TOKENS` | Maximum answer tokens |
+| `BASH_CONFIRM` | `1` = ask for confirmation before risky commands |
 
-Only `DEEPSEEK_API_KEY` is required. Every command the model runs is appended to
-`~/.config/deepseek-bubble/cmd.log` with a timestamp, whether or not `BASH_CONFIRM` is on.
+Conversation history is stored in `history.json` in the same folder and is deleted on **Reset**. Every command the AI runs is logged to `cmd.log`.
 
-Because the endpoint is configurable, the bubble also works with a local or LAN model server
-(llama.cpp, vLLM, Ollama, OpenRouter, …) as long as it speaks the OpenAI chat-completions API
-and supports tool calling.
+## Security — please read
 
-## License
+The agentic chat can **run shell commands on your phone**. Use it carefully:
 
-GPL-3.0 — see [LICENSE](LICENSE).
+- Turn on confirmation for risky commands (`rm`, `mv`, `chmod`, `dd`, `reboot`, and similar) by adding `BASH_CONFIRM=1` to the config file. Those commands will wait until you tap **Run**.
+- Do not ask the AI to process text or repositories from sources you do not trust. They may contain hidden instructions that try to make the AI run harmful commands.
+- Check `cmd.log` to see everything that has been executed.
+- **Never share or commit your API keys.** Do not use someone else's key sent to you in a chat. Shared keys can be revoked at any time, and the owner can see all of your usage.
+- Clipboard text and your messages are sent to the provider you choose. Do not copy secrets when using the quick actions.
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `bad interpreter: tgui-bash` | Run `pkg install termux-gui-bash` |
+| Termux:GUI "App not installed" | The app source differs from Termux. Check with `termux-info \| grep -i apk`, then install from the same source (F-Droid or GitHub) |
+| Bubble does not appear | Enable *Display over other apps* for Termux:GUI and make sure the app is installed |
+| `Invalid key` | Check the key, provider, and model. Try a different `--model` |
+| Clipboard, toast, or speech not working | Install `termux-api` and the Termux:API app |
+| `SCREEN_H_PX: unbound variable` | Fixed in this version. Run `./deepseek-bubble.sh --update` |
+
+## Development
+
+- GitHub Actions runs syntax and ShellCheck checks on every push (see `.github/workflows`).
+- Planned: an agent mode that fixes code in a repo on its own (read errors, edit, run checks, then show a diff for approval), image generation support, and a fuller update command.
+
+Contributions via Issues and Pull Requests are welcome.
+
+## License and credits
+
+GPL-3.0, see [LICENSE](LICENSE). Based on [ExTV/termux-bubble](https://github.com/ExTV/termux-bubble). Thanks to ExTV and to the authors of Termux and Termux:GUI.
