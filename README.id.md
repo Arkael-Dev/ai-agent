@@ -4,7 +4,7 @@
 
 > Asisten AI agentik untuk Linux. Ngobrol dengan DeepSeek (default), OpenAI, Gemini, Claude, OpenRouter, Groq, atau model Ollama lokal — dan biarkan model membaca file, menjalankan program, serta mengambil data di mesinmu lewat tool `run_bash`. Murni Bash, tanpa runtime tambahan. Bawa API key sendiri.
 
-Jalan di **Arch, Debian/Ubuntu, Fedora, openSUSE, Alpine, WSL, dan macOS**, termasuk di dalam container `proot-distro` / `chroot`. Lihat [Kompatibilitas](PORTABILITY.md) untuk tabel lengkapnya.
+Jalan di **Arch, Debian/Ubuntu, Fedora, openSUSE, Alpine, WSL, dan macOS**, termasuk di dalam image container yang dibuat dengan `proot-distro` / `chroot`. Lihat [Kompatibilitas](PORTABILITY.md) untuk tabel lengkapnya.
 
 ## Tujuan
 
@@ -74,13 +74,16 @@ ai
 ```
 ⚡ AI Agent
  AI: deepseek · deepseek-flash · key ✓
- Host: Arch Linux
+ Host: Fedora Linux 41
 
   1) Chat in terminal
   4) Choose AI / API key / model
   5) Update
   q) Quit
 ```
+
+Di desktop menu ini tampil sebagai jendela kecil (lihat [Menu GUI](#menu-gui-di-desktop));
+tanpa sesi grafis ia dicetak sebagai teks seperti di atas.
 
 Pintasan: `ai chat`, `ai setup`, `ai update`, atau `ai "pertanyaanmu"` untuk jawaban sekali jalan.
 
@@ -264,4 +267,4 @@ GPL-3.0, lihat [LICENSE](LICENSE).
 - **Pembuat asli:** [ExTV](https://github.com/ExTV), pembuat [ExTV/termux-bubble](https://github.com/ExTV/termux-bubble) yang menjadi dasar proyek ini.
 - **Dimodifikasi oleh:** [Arkael-Dev](https://github.com/Arkael-Dev): dukungan banyak provider, chat terminal, dukungan Linux/macOS portabel, launcher `ai` dan installer, serta perubahan lainnya.
 
-Terima kasih kepada ExTV (pembuat termux-bubble) dan para pengembang Termux.
+Terima kasih kepada ExTV (pembuat termux-bubble) atas desain awal proyek ini.

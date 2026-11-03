@@ -1,5 +1,18 @@
 # Changelog
 
+## portable-linux — GUI menu, bubble removed
+
+- `ai-agent` is now the `ai` command: a `dialog`/`whiptail` menu (chat in a new
+  terminal window, chat here, AI/key/model, update, close) with a plain-text
+  fallback when there is no desktop or `AI_NO_GUI=1`
+- terminal emulator detection (gnome-terminal, konsole, xfce4-terminal,
+  alacritty, kitty, foot, xterm, …); Terminal.app on macOS
+- fixed: the `3>&1 1>&2 2>&3` redirect and multi-line dialog output made the
+  chosen menu entry come back empty on some shells
+- removed `ai-agent-bubble.sh` and its `pkg install termux-api termux-gui-bash`
+  paths (`install.sh` and the install hints no longer mention Termux)
+- README / README.id / PORTABILITY.md rewritten for Linux desktops
+
 ## portable-linux — dukungan Linux / macOS portabel
 
 - `ai-agent-chat.sh`: portable `#!/usr/bin/env bash` shebang

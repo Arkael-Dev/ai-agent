@@ -59,9 +59,7 @@ done
 # install hint that matches the host package manager
 install_hint() {
     local pkgs="curl jq coreutils grep sed"
-    if [ -n "${TERMUX_VERSION:-}" ] && [ -n "${PREFIX:-}" ]; then
-        echo "pkg install $pkgs"
-    elif command -v pacman >/dev/null 2>&1; then
+    if command -v pacman >/dev/null 2>&1; then
         echo "pacman -S $pkgs"
     elif command -v apt-get >/dev/null 2>&1; then
         echo "sudo apt install $pkgs"

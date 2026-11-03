@@ -33,9 +33,7 @@ for d in curl jq sed grep; do command -v "$d" >/dev/null 2>&1 || need="$need $d"
 
 if [ -n "$need" ]; then
     echo "Missing:$need — installing…"
-    if [ -n "${TERMUX_VERSION:-}" ] && [ -n "${PREFIX:-}" ]; then
-        pkg install -y jq curl coreutils git termux-api termux-gui-bash || true
-    elif command -v pacman >/dev/null 2>&1; then
+    if command -v pacman >/dev/null 2>&1; then
         SUDO=""; [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1 && SUDO="sudo"
         $SUDO pacman -S --needed --noconfirm jq curl coreutils grep sed
     elif command -v apt-get >/dev/null 2>&1; then

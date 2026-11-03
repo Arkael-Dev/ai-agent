@@ -4,7 +4,7 @@
 
 > An agentic AI assistant for Linux. Chat with DeepSeek (default), OpenAI, Gemini, Claude, OpenRouter, Groq, or a local Ollama model — and let the model read files, run programs, and fetch data on your machine through the `run_bash` tool. Pure Bash, no runtime to install. Bring your own API key.
 
-Works on **Arch, Debian/Ubuntu, Fedora, openSUSE, Alpine, WSL, and macOS**, including inside `proot-distro` / `chroot` containers. See [Compatibility](PORTABILITY.md) for the full matrix.
+Works on **Arch, Debian/Ubuntu, Fedora, openSUSE, Alpine, WSL, and macOS**, including inside container images built with `proot-distro` / `chroot`. See [Compatibility](PORTABILITY.md) for the full matrix.
 
 ## Purpose
 
@@ -74,13 +74,16 @@ ai
 ```
 ⚡ AI Agent
  AI: deepseek · deepseek-flash · key ✓
- Host: Arch Linux
+ Host: Fedora Linux 41
 
   1) Chat in terminal
   4) Choose AI / API key / model
   5) Update
   q) Quit
 ```
+
+On a desktop this menu is drawn as a small window (see [GUI menu](#gui-menu-on-a-desktop));
+without a session it is printed as text like the above.
 
 Shortcuts: `ai chat`, `ai setup`, `ai update`, or `ai "your question"` for a one-shot answer.
 
@@ -110,6 +113,9 @@ Run `ai` (or `./ai-agent`) and you get a small window instead of a prompt:
 │  5  Close                               │
 └─────────────────────────────────────────┘
 ```
+
+This is the same list you get over SSH or in a tty, drawn in a terminal; only a session
+with `$DISPLAY` or `$WAYLAND_DISPLAY` set gets the window.
 
 - **Chat in a new terminal window** opens your chat in a fresh terminal emulator
   (gnome-terminal, konsole, xfce4-terminal, alacritty, kitty, foot, xterm, …);
@@ -246,7 +252,7 @@ The agentic chat can **run shell commands on your machine**. Use it carefully:
 | `Invalid key` | Check the key, provider, and model. Try a different `--model` |
 | `model not found` | Default model names change; pass `--model` with a valid id |
 | Something else looks wrong | Run `./ai-agent-chat.sh --doctor` and check the platform line |
-| Running inside a container | `--doctor` reports PRoot/chroot explicitly; the terminal chat works normally |
+| Running inside a container | `--doctor` reports `proot`/`chroot` explicitly; the terminal chat works normally |
 
 ## Development
 
@@ -266,4 +272,4 @@ GPL-3.0, see [LICENSE](LICENSE).
 - **Original author:** [ExTV](https://github.com/ExTV), creator of [ExTV/termux-bubble](https://github.com/ExTV/termux-bubble), which this project is based on.
 - **Modified by:** [Arkael-Dev](https://github.com/Arkael-Dev): multi-provider support, terminal chat, portable Linux/macOS support, the `ai` launcher and installer, and other changes.
 
-Thanks to ExTV (author of termux-bubble) and to the Termux developers.
+Thanks to ExTV (author of termux-bubble) for the original design this project grew out of.

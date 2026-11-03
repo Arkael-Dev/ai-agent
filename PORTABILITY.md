@@ -1,10 +1,16 @@
-# Running on non-Android Linux / macOS
+# Running on Linux / macOS
 
-The bubble (`ai-agent-bubble.sh`) is Termux-only: it relies on Termux:GUI
-(`tgui-bash`, `termux-bubble`) and Termux:API, which do not exist on a desktop
-Linux distribution.
+This project started as an Android/Termux app built around a floating overlay
+bubble (`ai-agent-bubble.sh`). That script needs Termux:GUI (`tgui-bash`,
+`termux-bubble`) and Termux:API, which do not exist on a desktop distribution,
+so it is **no longer part of this build**. What is left is portable code:
 
-`ai-agent-chat.sh` is portable. On the `percobaan` branch it has been changed to:
+- `ai-agent-chat.sh` — the agent itself (chat in the terminal).
+- `ai-agent` — the `ai` command: a GUI menu on a desktop (`dialog`/`whiptail`),
+  the same menu as plain text on a server, and `chat` / `setup` / `update` /
+  `doctor` subcommands.
+
+Compared with the original bubble, `ai-agent-chat.sh` has:
 
 - shebang `#!/usr/bin/env bash` instead of the hard-coded Termux path
 - a platform detector (`PLATFORM` = `termux` / `linux` / `macos` / `other`)
@@ -17,17 +23,17 @@ Everything else (providers, BYOK, streaming, history, `run_bash` tool,
 
 ## Kompatibilitas distro
 
-| Platform | Chat / agent | Bubble | Catatan |
+| Platform | Chat / agent | GUI menu | Catatan |
 |---|---|---|---|
-| Termux (Android) | ✅ | ✅ | target asli |
-| Arch / Manjaro | ✅ | – | `pacman -S curl jq` |
-| Debian / Ubuntu / Mint | ✅ | – | `apt install curl jq` |
-| Fedora / RHEL | ✅ | – | `dnf install curl jq` |
-| openSUSE | ✅ | – | `zypper install curl jq` |
-| Alpine | ✅ | – | `apk add bash curl jq` |
+| Arch / Manjaro | ✅ | ✅ | `pacman -S bash curl jq dialog` |
+| Debian / Ubuntu / Mint | ✅ | ✅ | `apt install bash curl jq dialog` |
+| Fedora / RHEL | ✅ | ✅ | `dnf install bash curl jq dialog` |
+| openSUSE | ✅ | ✅ | `zypper install bash curl jq dialog` |
+| Alpine | ✅ | ✅ | `apk add bash curl jq dialog` |
 | proot-distro / chroot | ✅ | – | terdeteksi sebagai `linux`, ada catatan PRoot |
-| macOS | ✅* | – | butuh `brew install bash jq` (*bash ≥ 4) |
-| WSL | ✅ | – | sama seperti Linux |
+| macOS | ✅* | ✅ | butuh `brew install bash jq dialog` (*bash ≥ 4) |
+| WSL | ✅ | ✅ | sama seperti Linux |
+| Termux (Android) | – | – | butuh `termux-exec`/`dialog`; build ini tidak menargetkan Termux |
 
 Hal yang sudah dibuat portabel:
 
@@ -105,10 +111,11 @@ distro   : Arch Linux ARM
 note     : running inside a PRoot container
 ```
 
-## Not available outside Termux
+## Gone with the bubble
 
-- floating bubble overlay
+- floating overlay bubble and its autostart hook
 - clipboard quick actions via `termux-clipboard-*`
 - toast / TTS / speech-to-text helpers
 
-They degrade gracefully: the chat keeps working, only those helpers are gone.
+Nothing else depends on them: the chat, providers, streaming, history and the
+`run_bash` tool all work the same on a plain Linux desktop.
