@@ -60,10 +60,13 @@ Check everything in one shot with:
 ## Quick start (recommended)
 
 ```
-git clone https://github.com/Arkael-Dev/ai-agent
+git clone -b portable-linux https://github.com/Arkael-Dev/ai-agent
 cd ai-agent
 bash install.sh
 ```
+
+This README lives on the `portable-linux` branch — clone it with `-b portable-linux`
+(or use `main` once it is synced), otherwise you get the older bubble build.
 
 `install.sh` detects your package manager, installs the dependencies (asking for `sudo` only when it is needed), and adds a command called **`ai`** to a directory that is already on your `PATH`. After that, just type:
 
@@ -90,7 +93,7 @@ Shortcuts: `ai chat`, `ai setup`, `ai update`, or `ai "your question"` for a one
 ## Installation (manual)
 
 ```
-git clone https://github.com/Arkael-Dev/ai-agent
+git clone -b portable-linux https://github.com/Arkael-Dev/ai-agent
 cd ai-agent
 chmod +x ai-agent-chat.sh ai-agent
 ./ai-agent-chat.sh            # chat in the terminal

@@ -60,10 +60,13 @@ Cek semuanya sekaligus dengan:
 ## Mulai cepat (disarankan)
 
 ```
-git clone https://github.com/Arkael-Dev/ai-agent
+git clone -b portable-linux https://github.com/Arkael-Dev/ai-agent
 cd ai-agent
 bash install.sh
 ```
+
+README ini ada di branch `portable-linux` — clone dengan `-b portable-linux`
+(atau pakai `main` setelah disinkronkan), kalau tidak kamu akan dapat versi bubble yang lama.
 
 `install.sh` mendeteksi package manager-mu, memasang dependency (minta `sudo` hanya kalau perlu), dan menaruh perintah **`ai`** di direktori yang sudah ada di `PATH`. Setelah itu, cukup ketik:
 
@@ -90,7 +93,7 @@ Pintasan: `ai chat`, `ai setup`, `ai update`, atau `ai "pertanyaanmu"` untuk jaw
 ## Instalasi manual
 
 ```
-git clone https://github.com/Arkael-Dev/ai-agent
+git clone -b portable-linux https://github.com/Arkael-Dev/ai-agent
 cd ai-agent
 chmod +x ai-agent-chat.sh ai-agent
 ./ai-agent-chat.sh
