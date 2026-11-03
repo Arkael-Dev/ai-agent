@@ -1,4 +1,6 @@
 #!/data/data/com.termux/files/usr/bin/bash
+# Based on ExTV/termux-bubble (https://github.com/ExTV/termux-bubble), GPL-3.0.
+# Original author: ExTV. Modified by Arkael-Dev.
 # One-time setup: dependencies + the `ai` command.  Run:  bash install.sh
 set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

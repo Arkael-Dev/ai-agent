@@ -86,6 +86,8 @@ ai
 
 Shortcuts: `ai chat`, `ai bubble`, `ai stop`, `ai setup`, `ai update`, `ai autostart on|off`, or `ai "your question"` for a one-shot answer.
 
+**Autostart:** with `ai autostart on`, the menu opens on every new Termux session. Press `q` to close the session (so reopening Termux shows the menu again) or `s` to stay in the shell. To skip it once: `AI_AGENT_SKIP=1`.
+
 ## Installation
 
 ```
@@ -106,11 +108,11 @@ On start it opens a **menu** where you choose the AI before chatting:
 
 ```
 ⚡ AI Agent — choose your AI
-  1) DeepSeek    ✓ key saved          deepseek-v4-pro  ◀ current
+  1) DeepSeek    ✓ key saved          deepseek-flash   ◀ current
   2) OpenAI      ✗ needs API key      gpt-4o-mini
   ...
   7) Ollama      local · no key needed qwen2.5:3b
-  Enter = start with DeepSeek · deepseek-v4-pro
+  Enter = start with DeepSeek · deepseek-flash
   m = choose model   k = change API key   q = quit
 ```
 
@@ -260,4 +262,9 @@ Contributions via Issues and Pull Requests are welcome.
 
 ## License and credits
 
-GPL-3.0, see [LICENSE](LICENSE). Based on [ExTV/termux-bubble](https://github.com/ExTV/termux-bubble). Thanks to ExTV and to the authors of Termux and Termux:GUI.
+GPL-3.0, see [LICENSE](LICENSE).
+
+- **Original author:** [ExTV](https://github.com/ExTV), creator of [ExTV/termux-bubble](https://github.com/ExTV/termux-bubble), which this project is based on.
+- **Modified by:** [Arkael-Dev](https://github.com/Arkael-Dev): multi-provider support, terminal chat, the `ai` launcher and installer, and other changes.
+
+Thanks to ExTV and to the authors of Termux and Termux:GUI.

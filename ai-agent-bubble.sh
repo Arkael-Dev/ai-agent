@@ -1,4 +1,6 @@
 #!/data/data/com.termux/files/usr/bin/tgui-bash
+# Based on ExTV/termux-bubble (https://github.com/ExTV/termux-bubble), GPL-3.0.
+# Original author: ExTV. Modified by Arkael-Dev.
 set -u
 
 # ╔══════════════════════════════════════════════════════════════════════════╗

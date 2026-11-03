@@ -1,4 +1,6 @@
 #!/data/data/com.termux/files/usr/bin/bash
+# Based on ExTV/termux-bubble (https://github.com/ExTV/termux-bubble), GPL-3.0.
+# Original author: ExTV. Modified by Arkael-Dev.
 set -u
 
 # ai — one command for everything. Installed as `ai` by install.sh.
@@ -8,7 +10,7 @@ set -u
 #   ai stop            stop the bubble
 #   ai setup           choose AI, API key and model
 #   ai update          git pull
-#   ai autostart on|off   show this menu whenever Termux opens
+#   ai autostart on|off   open this menu on every new Termux session
 #   ai "question"      one-shot answer
 
 SELF="$(readlink -f "${BASH_SOURCE[0]}")"
@@ -35,21 +37,30 @@ bubble_running() { pgrep -f 'ai-agent-bubble\.sh' >/dev/null 2>&1; }
 rc_files() { for f in "$HOME/.zshrc" "$HOME/.bashrc"; do [ -f "$f" ] && echo "$f"; done; }
 autostart_on_p() { local f; for f in $(rc_files); do grep -qF "$MARK_BEGIN" "$f" && return 0; done; return 1; }
 
-autostart() {
+AUTO_LINE='[ -t 0 ] && [ -t 1 ] && [ -z "${AI_AGENT_SKIP:-}" ] && command -v ai >/dev/null 2>&1 && ai --auto && exit'
+autostart_strip() { local f; for f in $(rc_files); do sed -i "\|$MARK_BEGIN|,\|$MARK_END|d" "$f"; done; }
+autostart_write() {
     local f
+    [ -f "$HOME/.bashrc" ] || touch "$HOME/.bashrc"
+    for f in $(rc_files); do
+        printf '\n%s\n%s\n%s\n' "$MARK_BEGIN" "$AUTO_LINE" "$MARK_END" >> "$f"
+    done
+}
+# old installs wrote a block without "--auto"; upgrade it in place
+autostart_migrate() {
+    local f
+    autostart_on_p || return 0
+    for f in $(rc_files); do
+        grep -qF "$MARK_BEGIN" "$f" && ! grep -qF 'ai --auto' "$f" && { autostart_strip; autostart_write; return 0; }
+    done
+}
+
+autostart() {
     case "${1:-}" in
-        on)
-            [ -f "$HOME/.bashrc" ] || touch "$HOME/.bashrc"
-            for f in $(rc_files); do
-                grep -qF "$MARK_BEGIN" "$f" && continue
-                printf '\n%s\n[ -t 0 ] && [ -t 1 ] && [ -z "${AI_AGENT_SKIP:-}" ] && command -v ai >/dev/null 2>&1 && ai\n%s\n' \
-                    "$MARK_BEGIN" "$MARK_END" >> "$f"
-            done
-            echo "Menu will open whenever Termux starts. Turn off: ai autostart off" ;;
-        off)
-            for f in $(rc_files); do sed -i "\|$MARK_BEGIN|,\|$MARK_END|d" "$f"; done
-            echo "Autostart off." ;;
-        *) echo "Use: ai autostart on|off"; return 1 ;;
+        on)  autostart_strip; autostart_write
+             echo "Menu will open on every new Termux session. q closes the session, s keeps the shell. Turn off: ai autostart off" ;;
+        off) autostart_strip; echo "Autostart off." ;;
+        *)   echo "Use: ai autostart on|off"; return 1 ;;
     esac
 }
 
@@ -86,8 +97,10 @@ status_line() {
     echo " Bubble: $bub"
 }
 
+AUTO=0
 menu() {
     local ans a
+    autostart_migrate
     while :; do
         echo
         echo "${C_ACC}⚡ AI Agent${C_RST}"
@@ -100,7 +113,12 @@ menu() {
         echo "  5) Update"
         autostart_on_p && a="ON" || a="OFF"
         echo "  6) Open this menu when Termux starts: $a"
-        echo "  q) Quit"
+        if [ "$AUTO" = 1 ]; then
+            echo "  s) Shell (stay in Termux)"
+            echo "  q) Quit (close this session)"
+        else
+            echo "  q) Quit"
+        fi
         read -r -p "› " ans || { echo; return 0; }
         case "${ans//[$'\n\r\t ']/}" in
             1) bash "$CHAT" ;;
@@ -109,6 +127,7 @@ menu() {
             4) bash "$CHAT" --setup ;;
             5) do_update ;;
             6) if autostart_on_p; then autostart off; else autostart on; fi ;;
+            s|S) if [ "$AUTO" = 1 ]; then return 1; else echo "  Pick 1-6 or q."; fi ;;
             q|Q) return 0 ;;
             "") ;;
             *) echo "  Pick 1-6 or q." ;;
@@ -118,6 +137,7 @@ menu() {
 
 case "${1:-}" in
     "")        menu ;;
+    --auto)    AUTO=1; menu ;;     # used by autostart: q -> exit 0 (closes session), s -> exit 1 (keeps shell)
     chat)      shift; exec bash "$CHAT" "$@" ;;
     bubble)    start_bubble ;;
     stop)      stop_bubble ;;
