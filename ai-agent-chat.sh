@@ -1,28 +1,29 @@
 #!/data/data/com.termux/files/usr/bin/bash
 set -u
 
-# deepseek-chat.sh — chat with the same AI (and the same agent tool run_bash)
+# ai-agent-chat.sh — chat with any supported AI (with the agent tool run_bash)
 # directly in the Termux terminal. No GUI needed. Shares provider/key/model
-# with deepseek-bubble.sh via ~/.config/deepseek-bubble/config.
+# with ai-agent-bubble.sh via ~/.config/ai-agent/config.
 #
-#   ./deepseek-chat.sh                      interactive chat
-#   ./deepseek-chat.sh "your question"      one-shot answer
-#   cat file.txt | ./deepseek-chat.sh "summarize this"
-#   ./deepseek-chat.sh --provider openai --model gpt-4o-mini
+#   ./ai-agent-chat.sh                      interactive chat
+#   ./ai-agent-chat.sh "your question"      one-shot answer
+#   cat file.txt | ./ai-agent-chat.sh "summarize this"
+#   ./ai-agent-chat.sh --provider openai --model gpt-4o-mini
 #
-# In chat: /help /reset /model [id] /provider [name] /confirm on|off /exit
+# In chat: /help /menu /key /models /model /provider /reset /confirm /exit
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
-CLI_PROVIDER=""; CLI_MODEL=""; NEW=0; ARGS=()
+CLI_PROVIDER=""; CLI_MODEL=""; NEW=0; NO_MENU=0; ARGS=()
 
 usage() {
     cat <<'HELP'
-Usage: deepseek-chat.sh [--provider NAME] [--model ID] [--new] [text...]
-  no text, terminal   interactive chat (history kept between runs)
+Usage: ai-agent-chat.sh [--provider NAME] [--model ID] [--new] [--no-menu] [text...]
+  no text, terminal   start menu (pick AI, API key, model), then chat
+  --no-menu           skip the start menu and use the saved provider/model
   text or piped stdin one-shot answer, then exit
   --new               start with an empty conversation
 Providers: deepseek openai gemini claude openrouter groq ollama custom
-Chat commands: /help /reset /model [id] /provider [name] /confirm on|off /exit
+Chat commands: /help /menu /key /models /model [id] /provider [name] /reset /confirm on|off /exit
 HELP
 }
 while [ $# -gt 0 ]; do
@@ -30,6 +31,7 @@ while [ $# -gt 0 ]; do
         --provider) CLI_PROVIDER="${2:-}"; shift; [ $# -gt 0 ] && shift ;;
         --model)    CLI_MODEL="${2:-}"; shift; [ $# -gt 0 ] && shift ;;
         --new)      NEW=1; shift ;;
+        --no-menu)  NO_MENU=1; shift ;;
         -h|--help)  usage; exit 0 ;;
         --)         shift; ARGS+=("$@"); break ;;
         -*)         echo "Unknown option: $1 (try --help)" >&2; exit 1 ;;
@@ -92,7 +94,11 @@ provider_keyvar() {
 }
 
 # ── Settings ─────────────────────────────────────────────────────────────────
-CONFIG_DIR="${AI_CONFIG_DIR:-$HOME/.config/deepseek-bubble}"
+CONFIG_DIR="${AI_CONFIG_DIR:-$HOME/.config/ai-agent}"
+# one-time move of the settings folder used by earlier versions
+if [ -z "${AI_CONFIG_DIR:-}" ] && [ ! -d "$CONFIG_DIR" ] && [ -d "$HOME/.config/deepseek-bubble" ]; then
+    mv "$HOME/.config/deepseek-bubble" "$CONFIG_DIR" 2>/dev/null
+fi
 CONFIG_FILE="$CONFIG_DIR/config"
 HIST_FILE="$CONFIG_DIR/history-cli.json"   # separate from the bubble's history
 CMD_LOG="$CONFIG_DIR/cmd.log"
@@ -132,8 +138,8 @@ load_config() {
                 AI_BASE_URL=*)         CUSTOM_URL="${CUSTOM_URL:-$v}" ;;
                 DEEPSEEK_MODEL=*)      [ -n "$v" ] && MODELS[deepseek]="$v" ;;
                 DEEPSEEK_API_URL=*)    cfg_url="$v" ;;
-                DEEPSEEK_MAX_TOKENS=*) [ -n "$v" ] && MAX_TOKENS="$v" ;;
-                DEEPSEEK_THINKING=*)   [ -n "$v" ] && THINKING="$v" ;;
+                AI_MAX_TOKENS=*|DEEPSEEK_MAX_TOKENS=*) [ -n "$v" ] && MAX_TOKENS="$v" ;;
+                AI_THINKING=*|DEEPSEEK_THINKING=*)     [ -n "$v" ] && THINKING="$v" ;;
                 BASH_CONFIRM=*)        [ -n "$v" ] && CONFIRM_DANGEROUS="$v" ;;
                 MODEL_*=*)             k="${line%%=*}"; k="${k#MODEL_}"; [ -n "$v" ] && MODELS[$k]="$v" ;;
                 *_API_KEY=*)           k="${line%%=*}"; [ -n "$v" ] && KEYS[$k]="$v" ;;
@@ -166,7 +172,7 @@ save_config() {   # same file format as the bubble, so both stay in sync
         {
             printf 'AI_PROVIDER=%s\n' "$PROVIDER"
             printf 'AI_BASE_URL=%s\n' "$CUSTOM_URL"
-            printf 'DEEPSEEK_MAX_TOKENS=%s\nDEEPSEEK_THINKING=%s\nBASH_CONFIRM=%s\n' \
+            printf 'AI_MAX_TOKENS=%s\nAI_THINKING=%s\nBASH_CONFIRM=%s\n' \
                 "$MAX_TOKENS" "$THINKING" "$CONFIRM_DANGEROUS"
             for k in $KNOWN_PROVIDERS; do
                 kv="$(provider_keyvar "$k")"
@@ -181,23 +187,218 @@ save_config() {   # same file format as the bubble, so both stay in sync
 
 load_config
 
-TMP="$(mktemp -d "${TMPDIR:-/tmp}/deepseek-chat.XXXXXX")" || exit 1
+TMP="$(mktemp -d "${TMPDIR:-/tmp}/ai-agent-chat.XXXXXX")" || exit 1
 trap 'rm -rf "$TMP" >/dev/null 2>&1' EXIT
 INTERRUPTED=0
 trap 'INTERRUPTED=1' INT
 
+# ── Setup helpers: key, model list, verification, menu ───────────────────────
+MODEL_LIST=(); MODEL_LIST_FOR=""; VERIFY_ERR=""
+
+# read_key: hidden prompt. Sets API_KEY. Returns 1 if the user cancelled.
+read_key() {
+    local k hint=""
+    [ -n "$API_KEY" ] && hint=" [saved …${API_KEY: -4}, Enter = keep]"
+    while :; do
+        read -r -s -p "$(provider_label "$PROVIDER") API key${hint} (hidden, q = cancel): " k || { echo; return 1; }
+        echo
+        INTERRUPTED=0
+        k="${k//[$'\n\r\t ']/}"
+        case "$k" in
+            "")  [ -n "$API_KEY" ] && return 0
+                 echo "  An API key is required for this provider." ;;
+            q|Q) return 1 ;;
+            *)   API_KEY="$k"; echo "  received ${#k} characters"; return 0 ;;
+        esac
+    done
+}
+
+ask_custom_url() {
+    local u
+    read -r -p "Endpoint URL (full .../chat/completions) [${CUSTOM_URL:-none}]: " u || return 1
+    u="${u//[$'\n\r\t ']/}"
+    [ -n "$u" ] && CUSTOM_URL="$u"
+    [ -z "$CUSTOM_URL" ] && { echo "  A URL is required for the custom provider."; return 1; }
+    API_URL="$CUSTOM_URL"
+}
+
+fetch_models() {   # fills MODEL_LIST from the provider's /models endpoint
+    local url list hdr=()
+    [ "$MODEL_LIST_FOR" = "$PROVIDER" ] && [ "${#MODEL_LIST[@]}" -gt 0 ] && return 0
+    url="${API_URL%/chat/completions}/models"
+    hdr=(-H "Authorization: Bearer $API_KEY")
+    [ "$PROVIDER" = claude ] && hdr+=(-H "x-api-key: $API_KEY" -H "anthropic-version: 2023-06-01")
+    list="$(timeout 20 curl -sS --max-time 15 "${hdr[@]}" "$url" 2>/dev/null \
+        | jq -r '(.data // .models // [])[] | (.id // .name // empty)' 2>/dev/null \
+        | sed 's#^models/##' \
+        | grep -viE 'embed|whisper|tts|dall-e|moderation|transcribe|realtime|audio|image|guard' \
+        | sort -u)"
+    [ -z "$list" ] && return 1
+    mapfile -t MODEL_LIST <<<"$list"
+    MODEL_LIST_FOR="$PROVIDER"
+}
+
+pick_from_list() {   # numbered, paged list; sets MODEL
+    local per=10 page=0 total pages i start ans mark
+    total=${#MODEL_LIST[@]}; pages=$(( (total + per - 1) / per ))
+    while :; do
+        start=$((page * per))
+        echo "Models (page $((page+1))/$pages, $total total):"
+        for ((i=start; i<start+per && i<total; i++)); do
+            mark=" "; [ "${MODEL_LIST[$i]}" = "$MODEL" ] && mark="*"
+            printf ' %s%3d) %s\n' "$mark" "$((i+1))" "${MODEL_LIST[$i]}"
+        done
+        read -r -p "Number or id · n = next · p = prev · Enter = keep [$MODEL]: " ans || return 0
+        INTERRUPTED=0
+        ans="${ans//[$'\n\r\t ']/}"
+        case "$ans" in
+            "")  return 0 ;;
+            n|N) page=$(( (page + 1) % pages )) ;;
+            p|P) page=$(( (page + pages - 1) % pages )) ;;
+            *[!0-9]*) MODEL="$ans"; return 0 ;;          # typed a model id
+            *)   i=$((10#$ans))
+                 if [ "$i" -ge 1 ] && [ "$i" -le "$total" ]; then MODEL="${MODEL_LIST[$((i-1))]}"; return 0; fi
+                 echo "  No such number." ;;
+        esac
+    done
+}
+
+# choose_model [list]: with "list" it opens the model list straight away
+choose_model() {
+    local ans mode="${1:-}"
+    if [ "$mode" = list ]; then
+        echo "Loading models…"
+        if fetch_models; then pick_from_list; return 0; fi
+        echo "  Could not load the model list — type the model id instead."
+    fi
+    while :; do
+        read -r -p "Model [$MODEL] — Enter = keep, l = list, or type an id: " ans || return 0
+        INTERRUPTED=0
+        ans="${ans//[$'\n\r\t ']/}"
+        case "$ans" in
+            "")  return 0 ;;
+            l|L) if fetch_models; then pick_from_list; return 0; else echo "  Could not load the model list."; fi ;;
+            *)   MODEL="$ans"; return 0 ;;
+        esac
+    done
+}
+
+verify_setup() {   # tiny test request with the current provider/key/model
+    local code body
+    body="$(jq -nc --arg m "$MODEL" --arg tf "$TOKEN_FIELD" '{model:$m,messages:[{role:"user",content:"hi"}]} + {($tf):16}')"
+    : >"$TMP/chk.json"
+    code="$(curl -sS --max-time 30 -o "$TMP/chk.json" -w '%{http_code}' "$API_URL" \
+        -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/json" \
+        -d "$body" 2>"$TMP/chk.err")"
+    if [ -z "$code" ] || [ "$code" = 000 ]; then
+        VERIFY_ERR="$(head -c 160 "$TMP/chk.err" | tr -d '\n')"
+        [ -z "$VERIFY_ERR" ] && VERIFY_ERR="no response"
+        [ "$PROVIDER" = ollama ] && VERIFY_ERR="$VERIFY_ERR (is the Ollama server running?)"
+        return 1
+    fi
+    if [ "$code" -ge 400 ] 2>/dev/null; then
+        VERIFY_ERR="HTTP $code: $(jq -r '.error.message // empty' "$TMP/chk.json" 2>/dev/null)"
+        return 1
+    fi
+    return 0
+}
+
+# verify, then save. 0 = saved, 1 = cancelled (caller restores its snapshot)
+verify_and_save() {
+    local ans
+    while :; do
+        echo "Checking…"
+        if verify_setup; then
+            save_config
+            echo "${C_ACC}✓${C_RST} $(provider_label "$PROVIDER") · $MODEL saved"
+            return 0
+        fi
+        echo "${C_ERR}Check failed: $VERIFY_ERR${C_RST}"
+        read -r -p "[k] change key  [m] change model  [s] save anyway  [Enter] cancel: " ans || ans=""
+        INTERRUPTED=0
+        case "$ans" in
+            k|K) [ "$PROVIDER" != ollama ] && read_key ;;
+            m|M) choose_model list ;;
+            s|S) save_config; echo "Saved without a successful check."; return 0 ;;
+            *)   return 1 ;;
+        esac
+    done
+}
+
+# switch to provider $1: key (required unless local) -> model -> verify -> save
+setup_provider() {
+    local p="$1" o_p="$PROVIDER" o_k="$API_KEY" o_m="$MODEL"
+    restore() { activate_provider "$o_p"; API_KEY="$o_k"; MODEL="$o_m"; }
+    activate_provider "$p"
+    MODEL_LIST=(); MODEL_LIST_FOR=""
+    if [ "$p" = custom ]; then ask_custom_url || { restore; return 1; }; fi
+    if [ "$p" != ollama ]; then read_key || { restore; return 1; }; fi
+    choose_model list
+    verify_and_save || { restore; return 1; }
+}
+
+# first-run / flag path: make sure there is a usable key
 ensure_key() {
     [ -n "$API_KEY" ] && return 0
     if [ ! -t 0 ]; then
-        echo "No API key for $(provider_label "$PROVIDER"). Set $(provider_keyvar "$PROVIDER") or run interactively once." >&2
+        echo "No API key for $(provider_label "$PROVIDER"). Set $(provider_keyvar "$PROVIDER") or run ./ai-agent-chat.sh interactively once." >&2
         return 1
     fi
-    local k
-    read -r -s -p "$(provider_label "$PROVIDER") API key (hidden): " k; echo
-    k="${k//[$'\n\r\t ']/}"
-    [ -z "$k" ] && return 1
-    API_KEY="$k"; save_config
-    echo "Saved to $CONFIG_FILE"
+    read_key || return 1
+    verify_and_save || { API_KEY=""; return 1; }
+}
+
+# main_menu start|inchat -> 0 = go chat, 1 = quit
+main_menu() {
+    local mode="$1" ans i p kv st cur m list=() o_k o_m
+    for p in $KNOWN_PROVIDERS; do list+=("$p"); done
+    while :; do
+        echo
+        echo "${C_ACC}⚡ AI Agent${C_RST} — choose your AI"
+        i=0
+        for p in "${list[@]}"; do
+            i=$((i+1)); kv="$(provider_keyvar "$p")"
+            if   [ "$p" = ollama ]; then st="local · no key needed"
+            elif [ "$p" = custom ] && [ -z "$CUSTOM_URL" ]; then st="needs URL + key"
+            elif [ -n "${KEYS[$kv]:-}" ]; then st="✓ key saved"
+            else st="✗ needs API key"; fi
+            cur=""; [ "$p" = "$PROVIDER" ] && cur="  ◀ current"
+            m="${MODELS[$p]:-$(provider_model "$p")}"; [ "$p" = "$PROVIDER" ] && m="$MODEL"
+            printf '  %d) %-11s %-22s %s%s\n' "$i" "$(provider_label "$p")" "$st" "${m:-—}" "$cur"
+        done
+        echo "  Enter = $([ "$mode" = start ] && echo start || echo back) with $(provider_label "$PROVIDER") · $MODEL"
+        echo "  m = choose model   k = change API key   q = $([ "$mode" = start ] && echo quit || echo back)"
+        read -r -p "› " ans || { echo; return 1; }
+        INTERRUPTED=0
+        ans="${ans//[$'\n\r\t ']/}"
+        case "$ans" in
+            "")
+                if [ "$PROVIDER" != ollama ] && [ -z "$API_KEY" ]; then
+                    echo "  $(provider_label "$PROVIDER") needs an API key first — pick it by number or press k."
+                    continue
+                fi
+                return 0 ;;
+            q|Q) [ "$mode" = start ] && return 1; return 0 ;;
+            m|M)
+                if [ "$PROVIDER" != ollama ] && [ -z "$API_KEY" ]; then echo "  Add an API key first (k)."; continue; fi
+                o_m="$MODEL"; choose_model list
+                [ "$MODEL" != "$o_m" ] && { verify_and_save || MODEL="$o_m"; } ;;
+            k|K)
+                if [ "$PROVIDER" = ollama ]; then echo "  Ollama is local — no key needed."; continue; fi
+                o_k="$API_KEY"
+                read_key || { API_KEY="$o_k"; continue; }
+                verify_and_save || API_KEY="$o_k" ;;
+            *[!0-9]*)
+                case " $KNOWN_PROVIDERS " in
+                    *" ${ans,,} "*) setup_provider "${ans,,}" ;;
+                    *) echo "  Unknown choice." ;;
+                esac ;;
+            *)
+                i=$((10#$ans))
+                if [ "$i" -ge 1 ] && [ "$i" -le "${#list[@]}" ]; then setup_provider "${list[$((i-1))]}"
+                else echo "  No such number."; fi ;;
+        esac
+    done
 }
 
 # ── History ──────────────────────────────────────────────────────────────────
@@ -386,11 +587,15 @@ if [ ${#ARGS[@]} -gt 0 ] || [ "$HAS_STDIN" = 1 ]; then
 fi
 
 # ── Interactive chat ─────────────────────────────────────────────────────────
-ensure_key || exit 1
+if [ "$NO_MENU" = 1 ] || [ -n "$CLI_PROVIDER" ] || [ -n "$CLI_MODEL" ]; then
+    ensure_key || exit 1
+else
+    main_menu start || exit 0
+fi
 [ "$NEW" = 1 ] && hist_clear || hist_load
 restored=0; [ "$HISTORY" != '[]' ] && restored=$(( $(jq 'length' <<<"$HISTORY") - 1 ))
 
-echo "${C_ACC}⚡ $(provider_label "$PROVIDER")${C_RST} · $MODEL   ${C_DIM}(/help for commands, Ctrl-D to quit)${C_RST}"
+echo "${C_ACC}⚡ $(provider_label "$PROVIDER")${C_RST} · $MODEL   ${C_DIM}(/menu to switch AI, /key, /models, /help)${C_RST}"
 [ "$restored" -gt 0 ] && echo "${C_DIM}Restored $restored messages from the last session (/reset to clear).${C_RST}"
 
 while :; do
@@ -402,9 +607,22 @@ while :; do
     history -s "$line"
     case "$line" in
         /exit|/quit|/q) break ;;
+        /menu)  main_menu inchat; echo "${C_ACC}⚡ $(provider_label "$PROVIDER")${C_RST} · $MODEL"; continue ;;
+        /key)
+            if [ "$PROVIDER" = ollama ]; then echo "Ollama is local — no key needed."; continue; fi
+            o_k="$API_KEY"
+            read_key && verify_and_save || API_KEY="$o_k"
+            continue ;;
+        /models)
+            o_m="$MODEL"; choose_model list
+            [ "$MODEL" != "$o_m" ] && { verify_and_save || MODEL="$o_m"; }
+            echo "${C_ACC}⚡ $(provider_label "$PROVIDER")${C_RST} · $MODEL"; continue ;;
         /help)
+            echo "  /menu             open the AI menu (provider, key, model)"
+            echo "  /key              change the API key of the current AI"
+            echo "  /models           list models and pick one"
             echo "  /reset            clear the conversation"
-            echo "  /model [id]       show or change the model"
+            echo "  /model [id]       show or set the model by id"
             echo "  /provider [name]  show or change provider ($KNOWN_PROVIDERS)"
             echo "  /confirm on|off   ask before risky shell commands (now: $([ "$CONFIRM_DANGEROUS" = 1 ] && echo on || echo off))"
             echo "  /exit             quit   (Ctrl-C stops a running answer)"
@@ -414,14 +632,12 @@ while :; do
         "/model "*)
             MODEL="${line#/model }"; MODEL="${MODEL//[$'\n\r\t ']/}"
             save_config; echo "Model → $MODEL"; continue ;;
-        /provider) echo "$PROVIDER   (available: $KNOWN_PROVIDERS)"; continue ;;
+        /provider) main_menu inchat; echo "${C_ACC}⚡ $(provider_label "$PROVIDER")${C_RST} · $MODEL"; continue ;;
         "/provider "*)
             p="${line#/provider }"; p="${p//[$'\n\r\t ']/}"
             case " $KNOWN_PROVIDERS " in
                 *" $p "*)
-                    activate_provider "$p"
-                    ensure_key || { echo "No key — staying without one."; continue; }
-                    save_config; echo "${C_ACC}⚡ $(provider_label "$PROVIDER")${C_RST} · $MODEL" ;;
+                    setup_provider "$p" && echo "${C_ACC}⚡ $(provider_label "$PROVIDER")${C_RST} · $MODEL" ;;
                 *) echo "Unknown provider: $p" ;;
             esac
             continue ;;
