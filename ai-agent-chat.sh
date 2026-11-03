@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 # Based on ExTV/termux-bubble (https://github.com/ExTV/termux-bubble), GPL-3.0.
 # Original author: ExTV. Modified by Arkael-Dev.
 set -u
@@ -15,7 +15,7 @@ set -u
 # In chat: /help /menu /key /models /model /provider /reset /confirm /exit
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
-CLI_PROVIDER=""; CLI_MODEL=""; NEW=0; NO_MENU=0; SETUP_ONLY=0; ARGS=()
+CLI_PROVIDER=""; CLI_MODEL=""; NEW=0; NO_MENU=0; SETUP_ONLY=0; DOCTOR=0; ARGS=()
 
 usage() {
     cat <<'HELP'
@@ -23,6 +23,7 @@ Usage: ai-agent-chat.sh [--provider NAME] [--model ID] [--new] [--no-menu] [--se
   no text, terminal   start menu (pick AI, API key, model), then chat
   --no-menu           skip the start menu and use the saved provider/model
   --setup             only open the AI menu (provider, key, model), then exit
+  --doctor            check dependencies and platform, then exit
   text or piped stdin one-shot answer, then exit
   --new               start with an empty conversation
 Providers: deepseek openai gemini claude openrouter groq ollama custom
@@ -36,6 +37,7 @@ while [ $# -gt 0 ]; do
         --new)      NEW=1; shift ;;
         --no-menu)  NO_MENU=1; shift ;;
         --setup)    SETUP_ONLY=1; shift ;;
+        --doctor)   DOCTOR=1; shift ;;
         -h|--help)  usage; exit 0 ;;
         --)         shift; ARGS+=("$@"); break ;;
         -*)         echo "Unknown option: $1 (try --help)" >&2; exit 1 ;;
@@ -43,9 +45,10 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-for _dep in curl jq timeout sed grep; do
+for _dep in curl jq sed grep; do
     command -v "$_dep" >/dev/null 2>&1 || {
-        echo "Missing dependency: $_dep — run: pkg install curl jq coreutils" >&2; exit 1; }
+        if [ -n "${TERMUX_VERSION:-}" ] || [ -d /data/data/com.termux ]; then _hint="pkg install curl jq coreutils"; else _hint="apt install curl jq coreutils  (or your distro equivalent)"; fi
+        echo "Missing dependency: $_dep — install with: $_hint" >&2; exit 1; }
 done
 
 # ── Colours (only on a terminal) ─────────────────────────────────────────────
@@ -103,6 +106,56 @@ provider_keyvar() {
         ollama) echo OLLAMA_API_KEY ;; *) echo AI_API_KEY ;;
     esac
 }
+
+# ── Platform (Termux / Linux / other) ────────────────────────────────────────
+if [ -n "${TERMUX_VERSION:-}" ] || [ -d /data/data/com.termux ]; then
+    PLATFORM=termux
+elif [ "$(uname -s 2>/dev/null)" = Darwin ]; then
+    PLATFORM=macos
+elif [ -d /proc ] && [ -f /etc/os-release ]; then
+    PLATFORM=linux
+else
+    PLATFORM=other
+fi
+# PREFIX on Termux, empty-ish elsewhere
+AI_PREFIX="${PREFIX:-$(dirname "$(dirname "$(command -v bash)")")}"
+
+# system info used in the tool description / --doctor
+uname_str() { uname -srm 2>/dev/null || echo unknown; }
+
+
+# ── --doctor ────────────────────────────────────────────────────────────────
+if [ "$DOCTOR" = 1 ]; then
+    echo "ai-agent-chat — environment check"
+    echo "platform : $PLATFORM ($(uname_str))"
+    echo "shell    : $BASH_VERSION"
+    echo "prefix   : $AI_PREFIX"
+    echo "config   : ${AI_CONFIG_DIR:-$HOME/.config/ai-agent}"
+    echo "--- dependencies ---"
+    for d in bash curl jq sed grep python3; do
+        if command -v "$d" >/dev/null 2>&1; then printf '  %-8s ok   %s\n' "$d" "$(command -v "$d")"
+        else printf '  %-8s MISSING\n' "$d"; fi
+    done
+    if timeout --foreground 1 true >/dev/null 2>&1 || command -v gtimeout >/dev/null 2>&1; then
+        echo "  timeout  ok"
+    else
+        echo "  timeout  missing (commands run without a time limit)"
+    fi
+    echo "--- optional (Termux only) ---"
+    for d in termux-clipboard-get termux-clipboard-set termux-toast termux-tts-speak; do
+        command -v "$d" >/dev/null 2>&1 && echo "  $d ok" || echo "  $d not available (Android feature)"
+    done
+    exit 0
+fi
+
+# portable timeout wrapper — GNU `timeout --foreground` is Linux-only
+if timeout --foreground 1 true >/dev/null 2>&1; then
+    run_timeout() { local t="$1"; shift; timeout --foreground -k 5 "$t" "$@"; }
+elif command -v gtimeout >/dev/null 2>&1; then
+    run_timeout() { local t="$1"; shift; gtimeout -k 5 "$t" "$@"; }
+else
+    run_timeout() { local t="$1"; shift; "$@"; }   # no timeout available: run plainly
+fi
 
 # ── Settings ─────────────────────────────────────────────────────────────────
 CONFIG_DIR="${AI_CONFIG_DIR:-$HOME/.config/ai-agent}"
@@ -535,7 +588,7 @@ run_bash_tool() {   # $1 = command -> TOOL_OUT
         read -r -p "${C_ERR}⚠ risky command — run it? [y/N] ${C_RST}" ans </dev/tty
         case "$ans" in y|Y|yes) ;; *) TOOL_OUT="exit=126"$'\n'"(the user declined this command)"; return ;; esac
     fi
-    ( cd "$HOME" && exec timeout --foreground -k 5 "$CMD_TIMEOUT" bash -c "$cmd" ) </dev/null >"$of" 2>&1
+    ( cd "$HOME" && run_timeout "$CMD_TIMEOUT" bash -c "$cmd" ) </dev/null >"$of" 2>&1
     ec=$?
     if [ "$INTERRUPTED" = 1 ]; then TOOL_OUT="exit=130"$'\n'"(stopped by user)"; return; fi
     out="exit=$ec"$'\n'"$(cat "$of" 2>/dev/null)"
