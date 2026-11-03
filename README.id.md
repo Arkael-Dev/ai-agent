@@ -2,12 +2,14 @@
 
 🌐 [English](README.md) · **Bahasa Indonesia**
 
-> Asisten AI agentik untuk Android yang bisa dipakai dua cara: **bubble melayang** di atas semua aplikasi, atau **chat di terminal Termux**. Bawa API key sendiri: DeepSeek (default), OpenAI, Gemini, Claude, OpenRouter, Groq, atau model Ollama lokal. Murni Bash.
+> Asisten AI agentik yang berjalan **hanya di Termux pada Android**. Dua tampilan: **bubble melayang** di atas semua aplikasi, atau **chat di terminal Termux**. Bawa API key sendiri: DeepSeek (default), OpenAI, Gemini, Claude, OpenRouter, Groq, atau model Ollama lokal. Murni Bash — tanpa Node, tanpa Python, tanpa build.
+
+**Branch ini (`main`) adalah versi Termux.** Dia bergantung pada tumpukan Android/Termux: `termux-gui-bash` (shebang `tgui-bash`), aplikasi Termux:GUI untuk overlay, dan aplikasi Termux:API untuk clipboard, toast, serta suara. Port Linux/macOS ada di branch [`portable-linux`](https://github.com/Arkael-Dev/ai-agent/tree/portable-linux) — jangan dicampur.
 
 Ada dua tampilan yang berbagi pengaturan, key, dan provider yang sama:
 
-- **`ai-agent-bubble.sh`**: bubble kecil yang bisa digeser muncul di atas semua aplikasi. Ketuk untuk membuka panel berisi **aksi cepat untuk teks di clipboard** (terjemah, ringkas, jelaskan, perbaiki, balas) dan **chat agentik** yang bisa menjalankan perintah shell di HP kamu untuk benar-benar menyelesaikan tugas.
-- **`ai-agent-chat.sh`**: chat agentik yang sama langsung di terminal Termux. Tanpa overlay dan tanpa Termux:GUI.
+- **`ai-agent-bubble.sh`**: bubble kecil yang bisa digeser, muncul di atas semua aplikasi. Ketuk untuk membuka panel berisi **aksi cepat untuk teks di clipboard** (terjemah, ringkas, jelaskan, perbaiki, balas) dan **chat agentik** yang bisa menjalankan perintah shell di HP kamu untuk benar-benar menyelesaikan tugas. Butuh Termux:GUI.
+- **`ai-agent-chat.sh`**: chat agentik yang sama langsung di terminal Termux. Tanpa overlay dan tanpa Termux:GUI — cukup `curl` dan `jq`.
 
 ## Maksud dan tujuan
 
@@ -34,27 +36,29 @@ Semuanya memakai format API yang kompatibel dengan OpenAI. DeepSeek tetap menjad
 | Lainnya | `custom` | `AI_API_KEY` | isi lewat `AI_MODEL` |
 
 Catatan:
-- Nama model bawaan bisa ketinggalan zaman. Kalau muncul error *model not found*, ganti dengan `--model NAMA_MODEL`.
-- Endpoint Claude yang kompatibel OpenAI masih bersifat eksperimental, jadi fitur tool-call mungkin tidak sempurna.
+- Nama model bawaan bisa ketinggalan zaman. Kalau muncul error *model not found*, pakai `--model NAMA_MODEL` atau pilih dari daftar yang dimuat script dari provider-mu.
+- Endpoint Claude yang kompatibel OpenAI masih eksperimental, jadi tool calling bisa tidak sempurna.
 - Untuk chat agentik (menjalankan perintah), pilih model yang mendukung tool calling. Model lokal yang terlalu kecil sering gagal di bagian ini.
 
-## Kebutuhan
+## Kebutuhan (khusus Termux)
 
 Install **tiga aplikasi** dari sumber yang **sama** (semuanya F-Droid, atau semuanya GitHub Releases). Jangan dicampur, karena tanda tangan yang berbeda membuat Android menolak pemasangan plugin.
 
 - [Termux](https://github.com/termux/termux-app/releases)
-- [Termux:GUI](https://github.com/termux/termux-gui/releases), mesin overlay
+- [Termux:GUI](https://github.com/termux/termux-gui/releases), mesin overlay (hanya untuk bubble)
 - [Termux:API](https://github.com/termux/termux-api/releases), untuk clipboard, toast, dan suara
 
-Jangan pakai build Play Store karena sudah usang.
+Jangan pakai build Play Store karena sudah usang dan tidak bisa berkomunikasi dengan plugin.
 
 Lalu di Termux:
 
 ```
-pkg update && pkg install termux-gui-bash jq curl termux-api git
+pkg update && pkg install jq curl coreutils git termux-api termux-gui-bash
 ```
 
-Aktifkan izin **Tampilkan di atas aplikasi lain** untuk Termux:GUI (Setelan > Aplikasi > Termux:GUI).
+- Aktifkan izin **Tampilkan di atas aplikasi lain** untuk Termux:GUI (Setelan > Aplikasi > Termux:GUI). Tanpa ini bubble tidak akan muncul.
+- Beri izin **clipboard / mikrofon / notifikasi** ke Termux:API saat Android meminta. Tanpa ini aksi cepat dan tombol mic tidak berfungsi.
+- Disarankan: jalankan `termux-setup-storage` supaya agen bisa membaca dan menulis file di penyimpanan bersama (`~/storage/shared`, misalnya Downloads).
 
 ## Mulai cepat (disarankan)
 
@@ -86,12 +90,14 @@ ai
 
 Pintasan: `ai chat`, `ai bubble`, `ai stop`, `ai setup`, `ai update`, `ai autostart on|off`, atau `ai "pertanyaanmu"` untuk satu jawaban langsung.
 
-## Instalasi
+**Autostart:** dengan `ai autostart on`, menu terbuka di setiap sesi Termux baru. Tekan `q` untuk menutup sesi (jadi saat Termux dibuka lagi menu muncul lagi) atau `s` untuk tetap di shell. Untuk melewatinya sekali: `AI_AGENT_SKIP=1 ai`.
+
+## Instalasi (manual)
 
 ```
 git clone https://github.com/Arkael-Dev/ai-agent
 cd ai-agent
-chmod +x ai-agent-bubble.sh ai-agent-chat.sh
+chmod +x ai-agent ai-agent-bubble.sh ai-agent-chat.sh
 ./ai-agent-bubble.sh      # bubble melayang (butuh Termux:GUI)
 ./ai-agent-chat.sh        # chat di terminal
 ```
@@ -100,17 +106,17 @@ Saat pertama kali menjalankan bubble, panel membuka layar **Settings**. Pilih **
 
 ## Chat di terminal (tanpa GUI)
 
-`ai-agent-chat.sh` memberi agen yang sama di terminal Termux. Provider, key, dan model-nya sama dengan bubble, jadi tidak perlu mengatur dua kali.
+`ai-agent-chat.sh` memberi agen yang sama di terminal Termux. Provider, key, dan model-nya sama dengan bubble, jadi tidak perlu mengatur dua kali. Mode ini yang dipakai kalau tidak ada Termux:GUI, atau saat masuk lewat `ssh` dari PC ke HP.
 
 Saat dijalankan, muncul **menu** untuk memilih AI sebelum mulai chat:
 
 ```
 ⚡ AI Agent — choose your AI
-  1) DeepSeek    ✓ key saved          deepseek-v4-pro  ◀ current
+  1) DeepSeek    ✓ key saved          deepseek-flash   ◀ current
   2) OpenAI      ✗ needs API key      gpt-4o-mini
   ...
   7) Ollama      local · no key needed qwen2.5:3b
-  Enter = start with DeepSeek · deepseek-v4-pro
+  Enter = start with DeepSeek · deepseek-flash
   m = choose model   k = change API key   q = quit
 ```
 
@@ -144,7 +150,7 @@ Tekan **Ctrl-C** untuk menghentikan jawaban yang sedang berjalan. Jawaban tampil
 
 ## Memilih provider dan model
 
-**Lewat aplikasi (paling mudah):** ketuk tombol **⚙** di header panel.
+**Lewat bubble (paling mudah):** ketuk tombol **⚙** di header panel.
 
 - **Provider ▸** berganti antara DeepSeek, OpenAI, Gemini, Claude, OpenRouter, Groq, dan Ollama.
 - **API key:** tempel key milikmu sendiri. Kosongkan untuk tetap memakai key yang sudah tersimpan untuk provider itu.
@@ -170,13 +176,14 @@ Semua key yang pernah kamu simpan tetap tersimpan, jadi kamu bisa berpindah prov
 
 ### Ollama (model lokal)
 
-Tanpa key dan tanpa internet. Pastikan server Ollama berjalan, lalu:
+Tanpa key dan tanpa internet. Menjalankan Ollama **di dalam Termux** bisa, tapi berat: install dulu, jalankan server, lalu:
 
 ```
+ollama serve &                     # sekali per sesi Termux
 ./ai-agent-bubble.sh --provider ollama --model qwen2.5:3b
 ```
 
-Kalau Ollama berjalan di PC dalam jaringan yang sama, arahkan dengan:
+Kalau Ollama berjalan di PC dalam Wi-Fi yang sama, arahkan ke sana — jauh lebih cepat daripada di HP:
 
 ```
 OLLAMA_HOST="http://192.168.1.10:11434" ./ai-agent-bubble.sh --provider ollama
@@ -197,7 +204,7 @@ AI_BASE_URL="https://contoh.com/v1/chat/completions" AI_API_KEY="..." AI_MODEL="
 - **Geser** bubble ke mana saja, **ketuk** untuk membuka panel.
 - **Aksi clipboard:** salin teks di aplikasi apa pun, lalu ketuk *Trans / Sum / Expl / Fix / Reply*.
 - **Chat:** ketik permintaan lalu **Send**. Model bisa menjalankan perintah bash di HP untuk menyelesaikan tugas. Ketuk **Stop** untuk membatalkan.
-- **Copy / Speak:** salin atau bacakan jawaban terakhir. **Mic** untuk input suara.
+- **Copy / Speak:** salin atau bacakan jawaban terakhir. **Mic** untuk input suara (butuh Termux:API dan paket pengenal suara bawaan Android).
 - **Reset** menghapus percakapan. **▽** menciutkan panel. **✕** menutup aplikasi.
 - **⚙** membuka Settings untuk mengganti provider, key, dan model kapan saja.
 - **Memindahkan panel:** geser lewat area header (baris judul). Bisa juga ketuk **▽** untuk menciutkan jadi bubble, geser bubble ke mana saja, lalu ketuk untuk membukanya lagi.
@@ -225,39 +232,47 @@ File: `~/.config/ai-agent/config` (izin `600`, hanya bisa dibaca pemilik).
 | `AI_MAX_TOKENS` | Batas token jawaban |
 | `BASH_CONFIRM` | `1` = minta konfirmasi sebelum perintah berisiko |
 
-Riwayat percakapan disimpan di `history.json` (bubble) dan `history-cli.json` (chat terminal) di folder yang sama dan dihapus saat **Reset**. Setiap perintah yang dijalankan AI dicatat di `cmd.log`.
+Riwayat percakapan disimpan di `history.json` (bubble) dan `history-cli.json` (chat terminal) di folder yang sama, dan dihapus lewat **Reset**. Setiap perintah yang dijalankan AI dicatat di `cmd.log`.
 
-> **Upgrade dari versi lama?** Folder pengaturan pindah dari `~/.config/deepseek-bubble` ke `~/.config/ai-agent`. Pemindahan dilakukan otomatis saat pertama jalan, jadi key dan riwayat tetap aman. Nama lama `DEEPSEEK_THINKING` dan `DEEPSEEK_MAX_TOKENS` masih dibaca dan akan ditulis ulang sebagai `AI_THINKING` dan `AI_MAX_TOKENS` saat pengaturan disimpan berikutnya.
+> **Upgrade dari versi lama?** Folder pengaturan pindah dari `~/.config/deepseek-bubble` ke `~/.config/ai-agent`. Dipindahkan otomatis saat pertama kali jalan, jadi key dan riwayatmu tetap ada. Nama lama `DEEPSEEK_THINKING` dan `DEEPSEEK_MAX_TOKENS` masih dibaca dan akan ditulis ulang sebagai `AI_THINKING` dan `AI_MAX_TOKENS` saat pengaturan disimpan berikutnya.
 
-## Keamanan — baca ini
+## Keamanan — mohon dibaca
 
-Chat agentik bisa **menjalankan perintah shell di HP kamu**. Gunakan dengan hati-hati:
+Chat agentik (bubble dan terminal) bisa **menjalankan perintah shell di HP kamu**. Pakai dengan hati-hati:
 
-- Aktifkan konfirmasi untuk perintah berisiko (`rm`, `mv`, `chmod`, `dd`, `reboot`, dan sejenisnya) dengan menambahkan `BASH_CONFIRM=1` di file config. Di bubble perintah itu menunggu kamu mengetuk **Run**; di chat terminal akan ditanya `y/N` (atau pakai `/confirm on`).
-- Jangan minta AI memproses teks atau repo dari sumber yang tidak kamu percaya. Isinya bisa berisi instruksi tersembunyi untuk menyuruh AI menjalankan perintah berbahaya.
-- Periksa `cmd.log` untuk melihat apa saja yang pernah dijalankan.
-- **Jangan pernah membagikan atau meng-commit API key.** Jangan memakai key milik orang lain yang dikirim lewat chat. Key bersama bisa dicabut kapan saja dan semua pemakaianmu terlihat oleh pemiliknya.
-- Teks di clipboard dan pesanmu dikirim ke provider yang kamu pilih. Jangan salin data rahasia saat memakai aksi cepat.
+- Nyalakan konfirmasi untuk perintah berisiko (`rm`, `mv`, `chmod`, `dd`, `reboot`, dan sejenisnya) dengan menambahkan `BASH_CONFIRM=1` ke file config. Di bubble perintah tersebut menunggu sampai kamu ketuk **Run**; di chat terminal ditanya `y/N` (atau pakai `/confirm on`).
+- Jangan minta AI memproses teks atau repo dari sumber yang tidak kamu percaya. Bisa ada instruksi tersembunyi yang menyuruh AI menjalankan perintah berbahaya.
+- Periksa `cmd.log` untuk melihat semua yang sudah dijalankan.
+- **Jangan pernah membagikan atau meng-commit API key.** Jangan pakai key orang lain yang dikirim lewat chat. Key yang dibagikan bisa dicabut kapan saja, dan pemiliknya bisa melihat seluruh pemakaianmu.
+- Teks clipboard dan pesanmu dikirim ke provider yang kamu pilih. Jangan menyalin rahasia saat memakai aksi cepat.
 
 ## Pemecahan masalah
 
-| Gejala | Solusi |
+| Gejala | Perbaikan |
 |---|---|
 | `bad interpreter: tgui-bash` | Jalankan `pkg install termux-gui-bash` |
-| Termux:GUI "Aplikasi tidak diinstal" | Sumber aplikasi tidak sama dengan Termux. Cek dengan `termux-info \| grep -i apk`, lalu pasang dari sumber yang sama (F-Droid atau GitHub) |
-| Bubble tidak muncul | Aktifkan izin *Tampilkan di atas aplikasi lain* untuk Termux:GUI, dan pastikan aplikasinya terpasang |
-| `Invalid key` | Periksa key, provider, dan model. Coba `--model` lain |
-| Clipboard, toast, atau suara tidak jalan | Pasang `termux-api` dan aplikasi Termux:API |
+| Termux:GUI "App not installed" | Sumber aplikasi beda dengan Termux. Cek dengan `termux-info \| grep -i apk`, lalu install dari sumber yang sama (F-Droid atau GitHub) |
+| Bubble tidak muncul | Aktifkan *Tampilkan di atas aplikasi lain* untuk Termux:GUI dan pastikan aplikasinya terpasang |
+| Bubble hilang setelah beberapa saat | Android mematikan Termux di latar belakang. Jalankan `termux-wake-lock`, dan set Termux ke **Tanpa batas** di penghemat baterai (Setelan > Aplikasi > Termux > Baterai) |
+| Bubble hilang setelah layar mati | Sebab sama: wake lock + baterai tanpa batas. Jangan menutup Termux dari Recents |
+| `Invalid key` | Cek key, provider, dan model. Coba `--model` lain |
+| Clipboard, toast, atau suara tidak jalan | Install `termux-api` dan aplikasi Termux:API, lalu beri izinnya |
 | `SCREEN_H_PX: unbound variable` | Sudah diperbaiki di versi ini. Jalankan `./ai-agent-bubble.sh --update` |
-| Panel tidak bisa digeser | Geser dari baris judul. Kalau tetap gagal, ciutkan dengan **▽**, pindahkan bubble, lalu buka lagi. Untuk melapor, jalankan dengan `DRAG_DEBUG=1` dan kirim `~/.config/ai-agent/touch.log`. Bisa juga naikkan `DRAG_EXTRA_PX` (bawaan 110) |
+| Panel tidak mau digeser | Geser dari baris judul. Kalau tetap gagal, ciutkan dengan **▽**, geser bubble, lalu buka lagi. Untuk laporan, jalankan dengan `DRAG_DEBUG=1` dan kirim `~/.config/ai-agent/touch.log`. Bisa juga naikkan `DRAG_EXTRA_PX` (default 110) |
 
 ## Pengembangan
 
-- GitHub Actions menjalankan pengecekan sintaks dan ShellCheck pada setiap push (lihat `.github/workflows`).
-- Rencana: mode agen yang memperbaiki kode di repo secara mandiri (membaca error, mengedit, menjalankan pengecekan, lalu menampilkan diff untuk disetujui), dukungan pembuatan gambar, dan perintah update yang lebih lengkap.
+- GitHub Actions menjalankan syntax check dan ShellCheck di setiap push (lihat `.github/workflows`).
+- Script shell di branch ini wajib mempertahankan path Termux: shebang `/data/data/com.termux/files/usr/bin/bash` (atau `tgui-bash` untuk bubble) dan `${PREFIX:-/data/data/com.termux/files/usr}` untuk `$BIN`.
+- Pembagian branch: `main` = Termux/Android (yang ini), `portable-linux` = Linux dan macOS (membuang layer platform Termux, README berbeda).
 
-Kontribusi lewat Issues dan Pull Request dipersilakan.
+Kontribusi lewat Issue dan Pull Request sangat diterima.
 
 ## Lisensi dan kredit
 
-GPL-3.0, lihat [LICENSE](LICENSE). Berdasarkan [ExTV/termux-bubble](https://github.com/ExTV/termux-bubble). Terima kasih kepada ExTV dan pembuat Termux serta Termux:GUI.
+GPL-3.0, lihat [LICENSE](LICENSE).
+
+- **Pembuat asli:** [ExTV](https://github.com/ExTV), pembuat [ExTV/termux-bubble](https://github.com/ExTV/termux-bubble) yang menjadi dasar proyek ini.
+- **Dimodifikasi oleh:** [Arkael-Dev](https://github.com/Arkael-Dev): dukungan banyak provider, chat terminal, launcher `ai` dan installer, serta perubahan lainnya.
+
+Terima kasih kepada ExTV dan pembuat Termux serta Termux:GUI.

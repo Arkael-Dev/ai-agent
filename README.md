@@ -2,12 +2,14 @@
 
 🌐 **English** · [Bahasa Indonesia](README.id.md)
 
-> An agentic AI assistant for Android that you can use two ways: a **floating bubble** over every app, or a **chat in the Termux terminal**. Bring your own API key: DeepSeek (default), OpenAI, Gemini, Claude, OpenRouter, Groq, or a local Ollama model. Pure Bash.
+> An agentic AI assistant that runs **only in Termux on Android**. Two front-ends: a **floating bubble** over every app, or a **chat in the Termux terminal**. Bring your own API key: DeepSeek (default), OpenAI, Gemini, Claude, OpenRouter, Groq, or a local Ollama model. Pure Bash, no Node, no Python, no build step.
+
+**This branch (`main`) is the Termux build.** It depends on the Android/Termux stack: `termux-gui-bash` (shebang `tgui-bash`), the Termux:GUI app for the overlay, and the Termux:API app for clipboard, toast, and speech. The Linux/macOS port lives on the [`portable-linux`](https://github.com/Arkael-Dev/ai-agent/tree/portable-linux) branch — do not mix the two.
 
 There are two front-ends that share the same settings, keys, and providers:
 
-- **`ai-agent-bubble.sh`**: a small draggable bubble floats over every app. Tap it to open a panel with **clipboard quick-actions** (translate, summarize, explain, fix, reply) and an **agentic chat** where the model can run shell commands on your phone to actually get things done.
-- **`ai-agent-chat.sh`**: the same agentic chat directly in the Termux terminal. No overlay and no Termux:GUI needed.
+- **`ai-agent-bubble.sh`**: a small draggable bubble floats over every app. Tap it to open a panel with **clipboard quick-actions** (translate, summarize, explain, fix, reply) and an **agentic chat** where the model can run shell commands on your phone to actually get things done. Needs Termux:GUI.
+- **`ai-agent-chat.sh`**: the same agentic chat directly in the Termux terminal. No overlay, no Termux:GUI needed — just `curl` and `jq`.
 
 ## Purpose
 
@@ -34,27 +36,29 @@ All providers use the OpenAI-compatible chat API. DeepSeek remains the **default
 | Anything else | `custom` | `AI_API_KEY` | set via `AI_MODEL` |
 
 Notes:
-- Default model names may go out of date. If you get a *model not found* error, pass `--model YOUR_MODEL`.
+- Default model names may go out of date. If you get a *model not found* error, pass `--model YOUR_MODEL` or pick from the list the script loads from your provider.
 - Claude's OpenAI-compatible endpoint is experimental, so tool calling may not be perfect.
 - The agentic chat (running commands) needs a model that supports tool calling. Very small local models often fail at this.
 
-## Requirements
+## Requirements (Termux only)
 
 Install **three apps** from the **same source** (all from F-Droid, or all from GitHub Releases). Do not mix them: different signing keys make Android refuse to install the plugins.
 
 - [Termux](https://github.com/termux/termux-app/releases)
-- [Termux:GUI](https://github.com/termux/termux-gui/releases), the overlay engine
+- [Termux:GUI](https://github.com/termux/termux-gui/releases), the overlay engine (bubble only)
 - [Termux:API](https://github.com/termux/termux-api/releases), for clipboard, toast, and speech
 
-Do not use the Play Store builds; they are outdated.
+Do not use the Play Store builds; they are outdated and cannot talk to the plugins.
 
 Then, in Termux:
 
 ```
-pkg update && pkg install termux-gui-bash jq curl termux-api git
+pkg update && pkg install jq curl coreutils git termux-api termux-gui-bash
 ```
 
-Grant Termux:GUI the **Display over other apps** permission (Settings > Apps > Termux:GUI).
+- Grant Termux:GUI **Display over other apps** (Settings > Apps > Termux:GUI). Without it the bubble never appears.
+- Grant Termux:API **clipboard / microphone / notification** permission when Android asks. Without it the quick-actions and the mic button stay empty.
+- Optional but recommended: run `termux-setup-storage` so the agent can read and write files in shared storage (`~/storage/shared`, e.g. Downloads).
 
 ## Quick start (recommended)
 
@@ -86,14 +90,14 @@ ai
 
 Shortcuts: `ai chat`, `ai bubble`, `ai stop`, `ai setup`, `ai update`, `ai autostart on|off`, or `ai "your question"` for a one-shot answer.
 
-**Autostart:** with `ai autostart on`, the menu opens on every new Termux session. Press `q` to close the session (so reopening Termux shows the menu again) or `s` to stay in the shell. To skip it once: `AI_AGENT_SKIP=1`.
+**Autostart:** with `ai autostart on`, the menu opens on every new Termux session. Press `q` to close the session (so reopening Termux shows the menu again) or `s` to stay in the shell. To skip it once: `AI_AGENT_SKIP=1 ai`.
 
-## Installation
+## Installation (manual)
 
 ```
 git clone https://github.com/Arkael-Dev/ai-agent
 cd ai-agent
-chmod +x ai-agent-bubble.sh ai-agent-chat.sh
+chmod +x ai-agent ai-agent-bubble.sh ai-agent-chat.sh
 ./ai-agent-bubble.sh      # floating bubble (needs Termux:GUI)
 ./ai-agent-chat.sh        # chat in the terminal
 ```
@@ -102,7 +106,7 @@ On first launch of the bubble the panel opens the **Settings** screen. Pick your
 
 ## Terminal chat (no GUI)
 
-`ai-agent-chat.sh` gives you the same agent in the Termux terminal. It uses the same provider, key, and model as the bubble, so there is nothing to set up twice.
+`ai-agent-chat.sh` gives you the same agent in the Termux terminal. It uses the same provider, key, and model as the bubble, so there is nothing to set up twice. This is the mode to use on a phone with no Termux:GUI, or over `ssh` from a PC into the phone.
 
 On start it opens a **menu** where you choose the AI before chatting:
 
@@ -146,7 +150,7 @@ Press **Ctrl-C** to stop an answer that is still running. Replies stream in as t
 
 ## Choosing a provider and model
 
-**In the app (easiest):** tap the **⚙** button in the panel header.
+**In the bubble (easiest):** tap the **⚙** button in the panel header.
 
 - **Provider ▸** cycles through DeepSeek, OpenAI, Gemini, Claude, OpenRouter, Groq, and Ollama.
 - **API key:** paste your own key. Leave it empty to keep the key already saved for that provider.
@@ -172,13 +176,14 @@ Every key you have saved is kept, so you can switch providers without re-enterin
 
 ### Ollama (local models)
 
-No key and no internet needed. Make sure the Ollama server is running, then:
+No key and no internet needed. Running Ollama **inside Termux** is possible but heavy: install it, start the server, then:
 
 ```
+ollama serve &                     # only once per Termux session
 ./ai-agent-bubble.sh --provider ollama --model qwen2.5:3b
 ```
 
-If Ollama runs on a PC on the same network, point to it with:
+If Ollama runs on a PC on the same Wi-Fi network, point to it instead — much faster than the phone:
 
 ```
 OLLAMA_HOST="http://192.168.1.10:11434" ./ai-agent-bubble.sh --provider ollama
@@ -199,7 +204,7 @@ AI_BASE_URL="https://example.com/v1/chat/completions" AI_API_KEY="..." AI_MODEL=
 - **Drag** the bubble anywhere, **tap** it to open the panel.
 - **Clipboard actions:** copy text in any app, then tap *Trans / Sum / Expl / Fix / Reply*.
 - **Chat:** type a request and tap **Send**. The model can run bash commands on your phone to complete the task. Tap **Stop** to cancel.
-- **Copy / Speak:** copy or read aloud the last answer. **Mic** for voice input.
+- **Copy / Speak:** copy or read aloud the last answer. **Mic** for voice input (needs Termux:API + the speech package of your Android build).
 - **Reset** clears the conversation. **▽** collapses the panel. **✕** quits.
 - **⚙** opens Settings to change provider, key, and model at any time.
 - **Moving the panel:** drag it by the header area (the title row). You can also tap **▽** to collapse it into the bubble, drag the bubble anywhere, then tap it to reopen.
@@ -248,15 +253,18 @@ The agentic chat (bubble and terminal) can **run shell commands on your phone**.
 | `bad interpreter: tgui-bash` | Run `pkg install termux-gui-bash` |
 | Termux:GUI "App not installed" | The app source differs from Termux. Check with `termux-info \| grep -i apk`, then install from the same source (F-Droid or GitHub) |
 | Bubble does not appear | Enable *Display over other apps* for Termux:GUI and make sure the app is installed |
+| Bubble disappears after a while | Android killed Termux in the background. Run `termux-wake-lock`, and set Termux to **Unrestricted** battery usage (Settings > Apps > Termux > Battery) |
+| Bubble gone after screen off | Same cause as above: wake lock + battery unrestricted. Do not swipe Termux away from Recents |
 | `Invalid key` | Check the key, provider, and model. Try a different `--model` |
-| Clipboard, toast, or speech not working | Install `termux-api` and the Termux:API app |
+| Clipboard, toast, or speech not working | Install `termux-api` and the Termux:API app, and grant it the permissions |
 | `SCREEN_H_PX: unbound variable` | Fixed in this version. Run `./ai-agent-bubble.sh --update` |
 | Panel will not drag | Drag from the title row. If it still fails, collapse with **▽**, move the bubble, and reopen. To report it, run with `DRAG_DEBUG=1` and share `~/.config/ai-agent/touch.log`. You can also raise `DRAG_EXTRA_PX` (default 110) |
 
 ## Development
 
-- GitHub Actions runs syntax and ShellCheck checks on every push (see `.github/workflows`).
-- Planned: an agent mode that fixes code in a repo on its own (read errors, edit, run checks, then show a diff for approval), image generation support, and a fuller update command.
+- GitHub Actions runs a syntax check and ShellCheck on every push (see `.github/workflows`).
+- Shell scripts in this branch must keep the Termux paths hard-coded: shebang `/data/data/com.termux/files/usr/bin/bash` (or `tgui-bash` for the bubble) and `${PREFIX:-/data/data/com.termux/files/usr}` for `$BIN`.
+- Branch layout: `main` = Termux/Android (this one), `portable-linux` = Linux and macOS (drops the Termux platform layer, different README).
 
 Contributions via Issues and Pull Requests are welcome.
 
