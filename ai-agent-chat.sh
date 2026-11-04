@@ -371,6 +371,7 @@ verify_and_save() {
         echo "${C_ERR}Check failed: $VERIFY_ERR${C_RST}"
         read -r -p "[k] change key  [m] change model  [s] save anyway  [Enter] cancel: " ans || ans=""
         INTERRUPTED=0
+case "$ans" in s|S) if printf "%s" "$VERIFY_ERR" | grep -Eqi "HTTP 40[34]|\[40[34]\]|model_not_allowed|not permitted|no longer available"; then echo "  Not saving: model/key was rejected. Use [m] or [k]."; continue; fi ;; esac
         case "$ans" in
             k|K) [ "$PROVIDER" != ollama ] && read_key ;;
             m|M) choose_model list ;;
