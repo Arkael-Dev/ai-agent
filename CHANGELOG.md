@@ -19,6 +19,10 @@
   previous model untouched.
 - **Model list failures were silent.** `Could not load the model list` now shows the
   reason (for example `HTTP 403: rate limited` or a network error).
+- **KamiHub model list.** For endpoints on `kamihub.us.ci` the model picker now lists the
+  ids from its model page first (`atmoro/atmo/...`, `atmoro/alicn/...`), instead of burying
+  them among ids the key cannot use (`atmoro/ali/...`). Update the list in
+  `provider_presets` when KamiHub changes its models.
 - **`model_not_allowed` hint.** When a gateway rejects the model for your key, the check
   now says so and tells you to pick another id with `m`.
 

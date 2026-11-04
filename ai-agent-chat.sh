@@ -97,6 +97,18 @@ provider_presets() {
     case "$1" in
         deepseek) printf '%s\n' deepseek-flash deepseek-v4-pro ;;
         gemini)   printf '%s\n' gemini-3.5-flash gemini-3.5-flash-lite gemini-3.6-flash gemini-3.7-flash gemini-3.8-flash gemini-3-flash-preview gemini-3.1-pro-preview gemini-pro-latest ;;
+        custom)   # KamiHub's /models lists many ids a key may not use (e.g. atmoro/ali/...);
+                  # these are the ids from https://kamihub.us.ci/kamihub/model.html, cheapest first
+            case "${CUSTOM_URL:-}" in
+                *kamihub.us.ci*)
+                    printf '%s\n' \
+                        atmoro/atmo/deepseek-v4.1-flash atmoro/alicn/qwen3.8-flash atmoro/alicn/qwen3.8-omni-flash \
+                        atmoro/mm/MiniMax-M3 atmoro/alicn/deepseek-v4.1-flash atmoro/zai/glm-5.3-flash \
+                        atmoro/alicn/deepseek-v4-flash-0731 atmoro/zai/glm-4.6v atmoro/mm/MiniMax-M2.1 \
+                        atmoro/alicn/deepseek-v4-pro-0813 atmoro/alicn/kimi-k2.6 atmoro/mai/muse-spark-1.3-contributor \
+                        atmoro/alicn/glm-5.2 atmoro/zai/glm-5.3 atmoro/alicn/qwen3.8-max atmoro/alicn/qwen3.8-max-0902 \
+                        atmoro/cx/gpt-6-luna ;;
+            esac ;;
     esac
 }
 provider_label() {
