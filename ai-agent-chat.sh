@@ -438,6 +438,16 @@ main_menu() {
                     continue
                 fi
                 return 0 ;;
+            r|R)
+                read -r -p "  Reset ALL (keys, models, chat history)? [y/N] " yn </dev/tty
+                case "$yn" in
+                    y|Y|yes)
+                        rm -f "$CONFIG_DIR"/config "$CONFIG_DIR"/history*.json "$CONFIG_DIR"/cmd.log
+                        KEYS=(); MODELS=(); CUSTOM_URL=""; HISTORY='[]'
+                        activate_provider deepseek; API_KEY=""; MODEL="$(provider_model deepseek)"
+                        echo "  Reset done. Pick an AI to start from scratch." ;;
+                    *) echo "  Cancelled." ;;
+                esac ;;
             q|Q) [ "$mode" = start ] && return 1; return 0 ;;
             m|M)
                 if [ "$PROVIDER" != ollama ] && [ -z "$API_KEY" ]; then echo "  Add an API key first (k)."; continue; fi
