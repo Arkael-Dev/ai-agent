@@ -30,7 +30,7 @@ All providers use the OpenAI-compatible chat API. DeepSeek remains the **default
 |---|---|---|---|
 | DeepSeek (default) | `deepseek` | `DEEPSEEK_API_KEY` | `deepseek-flash` |
 | OpenAI (ChatGPT) | `openai` | `OPENAI_API_KEY` | `gpt-4o-mini` |
-| Google Gemini | `gemini` | `GEMINI_API_KEY` | `gemini-2.5-flash` |
+| Google Gemini | `gemini` | `GEMINI_API_KEY` | `gemini-3.5-flash` |
 | Anthropic Claude | `claude` | `ANTHROPIC_API_KEY` | `claude-sonnet-5-5` |
 | OpenRouter | `openrouter` | `OPENROUTER_API_KEY` | `openrouter/auto` |
 | Groq | `groq` | `GROQ_API_KEY` | `llama-3.3-70b-versatile` |
@@ -164,7 +164,7 @@ Press **Ctrl-C** to stop an answer that is still running. Replies stream in as t
 ```
 ./ai-agent-bubble.sh                                    # DeepSeek (default)
 ./ai-agent-bubble.sh --provider openai                  # ChatGPT
-./ai-agent-bubble.sh --provider gemini --model gemini-2.5-pro
+./ai-agent-bubble.sh --provider gemini --model gemini-3.1-pro-preview
 ./ai-agent-bubble.sh --provider ollama --model qwen2.5:3b
 ```
 

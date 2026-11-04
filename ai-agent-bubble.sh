@@ -18,7 +18,7 @@ set -u
 
 # ── CLI flags ────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
-VERSION="1.1.1"
+VERSION="1.1.2"
 CLI_PROVIDER=""; CLI_MODEL=""
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -106,7 +106,7 @@ provider_model() {
     case "$1" in
         deepseek)   echo "deepseek-flash" ;;
         openai)     echo "gpt-4o-mini" ;;
-        gemini)     echo "gemini-2.5-flash" ;;
+        gemini)     echo "gemini-3.5-flash" ;;
         claude)     echo "claude-sonnet-5-5" ;;
         openrouter) echo "openrouter/auto" ;;
         groq)       echo "llama-3.3-70b-versatile" ;;
@@ -401,8 +401,9 @@ stream_merge() {
           | .content += (($d.content // ""))
           | reduce (($d.tool_calls // [])[]) as $tc (.;
               (($tc.index // 0) | tostring) as $i
-              | .tools[$i] = ((.tools[$i] // {"id":null,"name":null,"arguments":""})
+              | .tools[$i] = ((.tools[$i] // {"id":null,"name":null,"arguments":"","extra":null})
                   | (if ($tc.id // null) != null then .id = $tc.id else . end)
+                  | (if ($tc.extra_content // null) != null then .extra = $tc.extra_content else . end)
                   | (if ($tc.function.name // null) != null then .name = $tc.function.name else . end)
                   | .arguments += (($tc.function.arguments) // "")) ))
     ' >"$tmp" 2>/dev/null && mv "$tmp" "$STREAM_STATE"
@@ -438,7 +439,8 @@ stream_finalize() {
       + (if (.tools | length) > 0 then
            {tool_calls: [ .tools | to_entries[] | .value
               | {id:(.id // ""), type:"function",
-                 function:{name:(.name // ""), arguments:(.arguments // "")}} ]}
+                 function:{name:(.name // ""), arguments:(.arguments // "")}}
+              + (if .extra != null then {extra_content:.extra} else {} end) ]}
          else {} end)
     ' "$STREAM_STATE" 2>/dev/null
 }

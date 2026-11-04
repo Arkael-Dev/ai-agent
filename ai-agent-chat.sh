@@ -15,7 +15,7 @@ set -u
 # In chat: /help /menu /key /models /model /provider /reset /confirm /exit
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
-VERSION="1.1.1"
+VERSION="1.1.2"
 CLI_PROVIDER=""; CLI_MODEL=""; NEW=0; NO_MENU=0; SETUP_ONLY=0; ARGS=()
 
 usage() {
@@ -83,7 +83,7 @@ provider_model() {
     case "$1" in
         deepseek)   echo "deepseek-flash" ;;
         openai)     echo "gpt-4o-mini" ;;
-        gemini)     echo "gemini-2.5-flash" ;;
+        gemini)     echo "gemini-3.5-flash" ;;
         claude)     echo "claude-sonnet-5-5" ;;
         openrouter) echo "openrouter/auto" ;;
         groq)       echo "llama-3.3-70b-versatile" ;;
@@ -96,7 +96,7 @@ provider_model() {
 provider_presets() {
     case "$1" in
         deepseek) printf '%s\n' deepseek-flash deepseek-v4-pro ;;
-        gemini)   printf '%s\n' gemini-2.5-flash gemini-2.5-pro gemini-3.5-flash gemini-3.5-flash-lite gemini-3.8-flash gemini-pro-latest ;;
+        gemini)   printf '%s\n' gemini-3.5-flash gemini-3.5-flash-lite gemini-3.6-flash gemini-3.7-flash gemini-3.8-flash gemini-3-flash-preview gemini-3.1-pro-preview gemini-pro-latest ;;
     esac
 }
 provider_label() {
@@ -550,8 +550,9 @@ api_call() {   # $1 = body -> MSG (assistant message). 0 ok, 1 error, 2 interrup
               .content += ($d.content // "")
               | reduce (($d.tool_calls // [])[]) as $tc (.;
                   (($tc.index // 0) | tostring) as $i
-                  | .tools[$i] = ((.tools[$i] // {id:null,name:null,arguments:""})
+                  | .tools[$i] = ((.tools[$i] // {id:null,name:null,arguments:"",extra:null})
                       | (if ($tc.id // null) != null then .id = $tc.id else . end)
+                      | (if ($tc.extra_content // null) != null then .extra = $tc.extra_content else . end)
                       | (if ($tc.function.name // null) != null then .name = $tc.function.name else . end)
                       | .arguments += ($tc.function.arguments // ""))))
           | {role:"assistant"}
@@ -559,14 +560,18 @@ api_call() {   # $1 = body -> MSG (assistant message). 0 ok, 1 error, 2 interrup
             + (if (.tools | length) > 0 then
                  {tool_calls: [.tools | to_entries | sort_by(.key | tonumber)[] | .value
                     | {id:(.id // ""), type:"function",
-                       function:{name:(.name // ""), arguments:(.arguments // "")}}]}
+                       function:{name:(.name // ""), arguments:(.arguments // "")}}
+                    + (if .extra != null then {extra_content:.extra} else {} end)]}
                else {} end)' "$sse" 2>/dev/null)"
     else
         # endpoint ignored stream:true and sent one JSON object
         if jq -e '.choices[0].message' "$raw" >/dev/null 2>&1; then
             MSG="$(jq -c '.choices[0].message
                   | {role:"assistant", content:(.content // null), tool_calls:(.tool_calls // null)}
-                  | with_entries(select(.value != null))' "$raw")"
+                  | with_entries(select(.value != null))
+                  | if has("tool_calls") then
+                      .tool_calls |= map(if (.extra_content // null) != null then . else . end)
+                    else . end' "$raw")"
             jq -r '.choices[0].message.content // empty' "$raw"
         else
             ERRMSG="$(api_err_msg <"$raw")"

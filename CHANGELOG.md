@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.1.2
+
+Focus: Gemini 3.x tool calls work again.
+
+### Fixed
+
+- **Gemini 3.x rejected every tool result with `HTTP 400: Function call is missing a
+  thought_signature in functionCall parts`.** Gemini 3 returns an opaque
+  `extra_content.google.thought_signature` on each `tool_calls` entry and requires it
+  back when the assistant turn is replayed. The stream parser dropped the field, so the
+  second request of every tool loop failed. Both parsers (`ai-agent-chat.sh`,
+  `ai-agent-bubble.sh`) now keep it and send it back.
+
+### Changed
+
+- **Gemini default model is now `gemini-3.5-flash`** (was `gemini-2.5-flash`).
+  Google answers 2.5 models with `404 This model models/gemini-2.5-flash is no longer
+  available to new users. Please update your code to use models/gemini-3.8-flash`.
+- **Model picker lists models that still exist:** `gemini-3.5-flash`,
+  `gemini-3.5-flash-lite`, `gemini-3.6-flash`, `gemini-3.7-flash`, `gemini-3.8-flash`,
+  `gemini-3-flash-preview`, `gemini-3.1-pro-preview`, `gemini-pro-latest`.
+
 ## 1.1.1
 
 Focus: stop a wrong-provider key from being saved and silently breaking every request.
