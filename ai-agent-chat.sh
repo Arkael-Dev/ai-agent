@@ -57,6 +57,14 @@ fi
 
 # ── Providers (same presets as the bubble) ───────────────────────────────────
 KNOWN_PROVIDERS="deepseek openai gemini claude openrouter groq ollama custom"
+api_err_msg() {   # short human message from an API error body on stdin (object / array-of-objects shapes)
+    jq -r 'def m(x): if (x|type)=="object" then (x.message // empty)
+                     elif (x|type)=="array" then (x[0] | m(.))
+                     else empty end;
+           if type=="array" then (.[0].error | m(.)) // (.[0] | m(.))
+           else (.error | m(.)) // m(.) end' 2>/dev/null | tr '\n' ' ' | cut -c1-300
+}
+
 provider_url() {
     case "$1" in
         deepseek)   echo "https://api.deepseek.com/chat/completions" ;;
@@ -86,6 +94,7 @@ provider_model() {
 provider_presets() {
     case "$1" in
         deepseek) printf '%s\n' deepseek-flash deepseek-v4-pro ;;
+        gemini)   printf '%s\n' gemini-2.5-flash gemini-2.5-pro gemini-3.5-flash gemini-3.5-flash-lite gemini-3.8-flash gemini-pro-latest ;;
     esac
 }
 provider_label() {
@@ -242,7 +251,7 @@ fetch_models() {   # fills MODEL_LIST from the provider's /models endpoint
     list="$(timeout 20 curl -sS --max-time 15 "${hdr[@]}" "$url" 2>/dev/null \
         | jq -r '(.data // .models // [])[] | (.id // .name // empty)' 2>/dev/null \
         | sed 's#^models/##' \
-        | grep -viE 'embed|whisper|tts|dall-e|moderation|transcribe|realtime|audio|image|guard' \
+        | grep -viE 'embed|whisper|tts|dall-e|moderation|transcribe|realtime|audio|image|guard|deep-research|computer-use|robotics|antigravity|live|lyria|nano-banana|omni|aqa|gemma' \
         | sort -u)"
     list="$( { provider_presets "$PROVIDER"; printf '%s\n' "$list"; } | awk 'NF && !seen[$0]++')"
     [ -z "$list" ] && return 1
@@ -309,7 +318,7 @@ verify_setup() {   # tiny test request with the current provider/key/model
         return 1
     fi
     if [ "$code" -ge 400 ] 2>/dev/null; then
-        VERIFY_ERR="HTTP $code: $(jq -r '.error.message // empty' "$TMP/chk.json" 2>/dev/null)"
+        VERIFY_ERR="HTTP $code: $(api_err_msg <"$TMP/chk.json")"
         return 1
     fi
     return 0
@@ -485,7 +494,7 @@ api_call() {   # $1 = body -> MSG (assistant message). 0 ok, 1 error, 2 interrup
         return 1
     fi
     if [ -n "$code" ] && [ "$code" -ge 400 ] 2>/dev/null; then
-        ERRMSG="HTTP $code: $(jq -r '.error.message // empty' "$raw" 2>/dev/null)"
+        ERRMSG="HTTP $code: $(api_err_msg <"$raw")"
         [ "$ERRMSG" = "HTTP $code: " ] && ERRMSG="HTTP $code: $(head -c 200 "$raw" | tr -d '\n')"
         return 1
     fi
@@ -514,7 +523,7 @@ api_call() {   # $1 = body -> MSG (assistant message). 0 ok, 1 error, 2 interrup
                   | with_entries(select(.value != null))' "$raw")"
             jq -r '.choices[0].message.content // empty' "$raw"
         else
-            ERRMSG="$(jq -r '.error.message // empty' "$raw" 2>/dev/null)"
+            ERRMSG="$(api_err_msg <"$raw")"
             [ -z "$ERRMSG" ] && ERRMSG="unexpected response: $(head -c 120 "$raw" | tr -d '\n')"
             return 1
         fi

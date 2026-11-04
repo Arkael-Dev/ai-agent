@@ -47,6 +47,14 @@ done
 
 # ── Provider presets (all speak the OpenAI chat/completions dialect) ─────────
 KNOWN_PROVIDERS="deepseek openai gemini claude openrouter groq ollama custom"
+api_err_msg() {   # short human message from an API error body on stdin (object / array-of-objects shapes)
+    jq -r 'def m(x): if (x|type)=="object" then (x.message // empty)
+                     elif (x|type)=="array" then (x[0] | m(.))
+                     else empty end;
+           if type=="array" then (.[0].error | m(.)) // (.[0] | m(.))
+           else (.error | m(.)) // m(.) end' 2>/dev/null | tr '\n' ' ' | cut -c1-300
+}
+
 provider_url() {
     case "$1" in
         deepseek)   echo "https://api.deepseek.com/chat/completions" ;;
@@ -311,7 +319,7 @@ api_post() {   # $1 = JSON body -> sets API_RESP, HTTP_CODE; returns 0=ok 1=erro
         return 1
     fi
     if [ -n "$HTTP_CODE" ] && [ "$HTTP_CODE" -ge 400 ] 2>/dev/null; then
-        CURL_ERR="HTTP $HTTP_CODE$( jq -r 'if .error.message then ": " + .error.message else "" end' <<<"$API_RESP" 2>/dev/null)"
+        CURL_ERR="HTTP $HTTP_CODE$( api_err_msg <<<"$API_RESP")"
         return 1
     fi
     return 0
@@ -455,7 +463,7 @@ api_stream_post() {   # $1 = body
         return 1
     fi
     if [ -n "$HTTP_CODE" ] && [ "$HTTP_CODE" -ge 400 ] 2>/dev/null; then
-        CURL_ERR="HTTP $HTTP_CODE$( jq -r 'if .error.message then ": " + .error.message else "" end' <"$STREAM_FILE" 2>/dev/null)"
+        CURL_ERR="HTTP $HTTP_CODE$( api_err_msg <"$STREAM_FILE")"
         return 1
     fi
     if ! stream_is_sse; then
@@ -572,7 +580,7 @@ ai_agent() {   # $1 = user input -> sets AGENT_ANSWER
                 AGENT_ANSWER="Network error: ${CURL_ERR:-no response}"; hist_save; return 1
             fi
             jq -e . >/dev/null 2>&1 <<<"$resp" || { AGENT_ANSWER="Unexpected API response."; hist_save; return 1; }
-            err="$(jq -r '.error.message // empty' <<<"$resp")"
+            err="$(api_err_msg <<<"$resp")"
             [ -n "$err" ] && { AGENT_ANSWER="API error: $err"; hist_save; return 1; }
             fr="$(jq -r '.choices[0].finish_reason // "stop"' <<<"$resp")"
             # strip reasoning_content; keep content+tool_calls
@@ -1002,7 +1010,7 @@ models_action() {
         list="$(timeout 20 curl -sS --max-time 15 "${hdr[@]}" "$url" 2>/dev/null \
             | jq -r '(.data // .models // [])[] | (.id // .name // empty)' 2>/dev/null \
             | sed 's#^models/##' \
-            | grep -viE 'embed|whisper|tts|dall-e|moderation|transcribe|realtime|audio|image|guard' \
+            | grep -viE 'embed|whisper|tts|dall-e|moderation|transcribe|realtime|audio|image|guard|deep-research|computer-use|robotics|antigravity|live|lyria|nano-banana|omni|aqa|gemma' \
             | sort -u)"
         if [ -z "$list" ]; then toast "Could not load models. Type the model id yourself."; return; fi
         mapfile -t MODEL_LIST <<<"$list"
@@ -1038,7 +1046,7 @@ save_key() {
     api_post "$(jq -nc --arg m "$ACTIVE_MODEL" --arg tf "$TOKEN_FIELD" '{model:$m,messages:[{role:"user",content:"hi"}]} + {($tf):16}')"
     rc=$?
     busy_end
-    [ -n "$API_RESP" ] && err="$(jq -r '.error.message // empty' <<<"$API_RESP" 2>/dev/null)"
+    [ -n "$API_RESP" ] && err="$(api_err_msg <<<"$API_RESP")"
     if [ "$rc" -ne 0 ] || [ -z "$API_RESP" ] || [ -n "$err" ]; then
         API_KEY="$old_key"; ACTIVE_MODEL="$old_model"
         toast "Failed: ${err:-${CURL_ERR:-no response}}"
