@@ -18,7 +18,7 @@ set -u
 
 # ── CLI flags ────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
-VERSION="1.1.0"
+VERSION="1.1.1"
 CLI_PROVIDER=""; CLI_MODEL=""
 while [ $# -gt 0 ]; do
     case "$1" in

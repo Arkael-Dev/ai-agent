@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.1.1
+
+Focus: stop a wrong-provider key from being saved and silently breaking every request.
+
+### Fixed
+
+- **A key for another provider could be stored under the wrong provider.** Pointing
+  the provider at Gemini while keeping the saved value (`Enter = keep`) stored the
+  DeepSeek key (`sk-64…938b`) as `GEMINI_API_KEY`; every later Gemini request then
+  answered `HTTP 400: Please pass a valid API key`. The setup check now rejects the
+  key, and "save anyway" refuses it too.
+- **Key shape is checked against the provider** (`key_shape_warn()`):
+  `gemini=AIza…`, `claude=sk-ant-…`, `openrouter=sk-or-v1-…`, `groq=gsk_…`.
+  A key that looks like another provider's is named explicitly
+  ("that looks like a DeepSeek/OpenAI key (sk-…), not a Gemini key (AIza…)").
+- Terminal chat asks for confirmation before using a wrongly-shaped key; the bubble
+  refuses it with a toast naming the reason.
+
+### Notes
+
+- If `GEMINI_API_KEY` already holds a DeepSeek/OpenAI key, clear it and run
+  `./ai-agent-chat.sh --setup` with a key from
+  <https://aistudio.google.com/apikey> (prefix `AIza`).
+
 ## 1.1.0
 
 Focus: Gemini works out of the box, and API errors are readable again.

@@ -15,7 +15,7 @@ set -u
 # In chat: /help /menu /key /models /model /provider /reset /confirm /exit
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
-VERSION="1.1.0"
+VERSION="1.1.1"
 CLI_PROVIDER=""; CLI_MODEL=""; NEW=0; NO_MENU=0; SETUP_ONLY=0; ARGS=()
 
 usage() {
