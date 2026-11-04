@@ -480,7 +480,7 @@ trim_history() {
     local limit="$1"
     while [ ${#HISTORY} -gt "$limit" ] && [ "$(jq 'length' <<<"$HISTORY")" -gt 2 ]; do
         HISTORY="$(jq -c 'del(.[1])' <<<"$HISTORY")"
-        while [ "$(jq -r 'if length > 1 then .[1].role else "" end' <<<"$HISTORY")" = "tool" ]; do
+        while [ "$(jq -r 'if length > 1 then .[1].role else "user" end' <<<"$HISTORY")" != "user" ]; do
             HISTORY="$(jq -c 'del(.[1])' <<<"$HISTORY")"
         done
     done
