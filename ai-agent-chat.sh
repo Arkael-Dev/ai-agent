@@ -15,11 +15,12 @@ set -u
 # In chat: /help /menu /key /models /model /provider /reset /confirm /exit
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+VERSION="1.1.0"
 CLI_PROVIDER=""; CLI_MODEL=""; NEW=0; NO_MENU=0; SETUP_ONLY=0; ARGS=()
 
 usage() {
     cat <<'HELP'
-Usage: ai-agent-chat.sh [--provider NAME] [--model ID] [--new] [--no-menu] [--setup] [text...]
+Usage: ai-agent-chat.sh [--provider NAME] [--model ID] [--new] [--no-menu] [--setup] [--version] [text...]
   no text, terminal   start menu (pick AI, API key, model), then chat
   --no-menu           skip the start menu and use the saved provider/model
   --setup             only open the AI menu (provider, key, model), then exit
@@ -37,6 +38,7 @@ while [ $# -gt 0 ]; do
         --no-menu)  NO_MENU=1; shift ;;
         --setup)    SETUP_ONLY=1; shift ;;
         -h|--help)  usage; exit 0 ;;
+        --version)  echo "ai-agent-chat.sh $VERSION"; exit 0 ;;
         --)         shift; ARGS+=("$@"); break ;;
         -*)         echo "Unknown option: $1 (try --help)" >&2; exit 1 ;;
         *)          ARGS+=("$1"); shift ;;

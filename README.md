@@ -6,6 +6,8 @@
 
 **This branch (`main`) is the Termux build.** It depends on the Android/Termux stack: `termux-gui-bash` (shebang `tgui-bash`), the Termux:GUI app for the overlay, and the Termux:API app for clipboard, toast, and speech. The Linux/macOS port lives on the [`portable-linux`](https://github.com/Arkael-Dev/ai-agent/tree/portable-linux) branch — do not mix the two.
 
+**Current release: v1.1.0** — see [CHANGELOG.md](CHANGELOG.md). Check your copy with `./ai-agent-chat.sh --version`.
+
 There are two front-ends that share the same settings, keys, and providers:
 
 - **`ai-agent-bubble.sh`**: a small draggable bubble floats over every app. Tap it to open a panel with **clipboard quick-actions** (translate, summarize, explain, fix, reply) and an **agentic chat** where the model can run shell commands on your phone to actually get things done. Needs Termux:GUI.

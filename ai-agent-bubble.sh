@@ -18,11 +18,13 @@ set -u
 
 # ── CLI flags ────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+VERSION="1.1.0"
 CLI_PROVIDER=""; CLI_MODEL=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --provider) CLI_PROVIDER="${2:-}"; shift 2 ;;
         --model)    CLI_MODEL="${2:-}"; shift 2 ;;
+        --version) echo "ai-agent-bubble.sh $VERSION"; exit 0 ;;
         --update)
             if [ -d "$SCRIPT_DIR/.git" ]; then
                 git -C "$SCRIPT_DIR" pull --ff-only && echo "Updated."
@@ -32,7 +34,7 @@ while [ $# -gt 0 ]; do
             exit 0 ;;
         -h|--help)
             cat <<'HELP'
-Usage: ai-agent-bubble.sh [--provider NAME] [--model ID] [--update]
+Usage: ai-agent-bubble.sh [--provider NAME] [--model ID] [--update] [--version]
 Providers: deepseek (default) openai gemini claude openrouter groq ollama custom
 Keys (env or ~/.config/ai-agent/config):
   DEEPSEEK_API_KEY OPENAI_API_KEY GEMINI_API_KEY ANTHROPIC_API_KEY

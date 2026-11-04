@@ -1,59 +1,33 @@
 # Changelog
 
-Floating bubble overlay or terminal chat. Pure Bash, bring your own API key.
-Repo: github.com/Arkael-Dev/ai-agent
-License: GPL-3.0 (derivative of ExTV/termux-bubble)
+## 1.1.0
 
-PROVIDERS (BYOK)
-- DeepSeek (default), OpenAI, Gemini, Claude, OpenRouter, Groq, Ollama, custom
-- All via OpenAI-compatible API
-- Key stored only on device, no middleman server
+Focus: Gemini works out of the box, and API errors are readable again.
 
-TWO MODES
-- ai-agent-bubble.sh: draggable floating bubble over any app
-- ai-agent-chat.sh: terminal chat, needs only curl and jq
+### Fixed
 
-AGENTIC
-- Model can read files, run programs, fetch data via run_bash tool
-- SSE streaming replies
-- Auto-retry on 429/5xx with backoff, real API error messages shown
+- **Gemini default model.** The shipped default `gemini-2.5-flash-lite` returns
+  `HTTP 404 ... is no longer available to new users` on new accounts. The default
+  is now `gemini-2.5-flash`, in both the config default and the setup menu.
+- **Error bodies shaped as arrays were shown as empty.** Gemini (and some
+  gateways) return `[{"error":{"code":404,"message":"..."}}]`, so
+  `jq -r '.error.message'` produced nothing and the UI printed `HTTP 404:` with no
+  reason. A new `api_err_msg()` helper reads both the object and the array shape,
+  and is used everywhere chat, the bubble and the setup check report an API error.
+- **Model list full of non-chat models.** `/models` filtering now also drops
+  `deep-research`, `computer-use`, `robotics`, `antigravity`, `live`, `lyria`,
+  `nano-banana`, `omni`, `aqa` and `gemma`.
 
-CLIPBOARD QUICK ACTIONS
-- Translate, summarize, explain, fix, reply
+### Added
 
-SECURITY
-- Every command logged to ~/.config/deepseek-bubble/cmd.log
-- BASH_CONFIRM=1 requires confirmation for risky commands
-- Control character sanitization and transcript length caps
+- `--version` flag in `ai-agent-bubble.sh` and `ai-agent-chat.sh`.
+- Gemini model presets in the model picker (`gemini-2.5-flash`, `gemini-2.5-pro`,
+  `gemini-3.5-flash`, `gemini-3.5-flash-lite`, `gemini-3.8-flash`,
+  `gemini-pro-latest`), merged with the live list from the API.
 
-UI
-- Conversation history saved and restored on start
-- Auto-scroll answer console
-- Mic dictation, Send becomes Stop with elapsed timer
-- Draggable panel, kept on screen
-- Settings screen for provider, key, model
+### Verified
 
-CONFIG
-- DEEPSEEK_MAX_TOKENS, DEEPSEEK_THINKING, DEEPSEEK_API_URL
-- MAX_RUN_SECONDS per-run budget
-- History trimmed automatically to bound context and cost
-
-INSTALL
-git clone https://github.com/Arkael-Dev/ai-agent
-cd ai-agent
-bash install.sh
-
-install.sh sets up packages, adds the "ai" command, optional autostart menu.
-
-REQUIREMENTS
-Termux + Termux:GUI + Termux:API, all from the same source.
-pkg install termux-gui-bash jq curl termux-api git
-
-NOTES
-- If you get model not found, pass --model YOUR_MODEL
-- Tool calling needs a capable model; very small local models often fail
-- Claude OpenAI-compatible endpoint is experimental
-
-Credit: ExTV (termux-bubble), modified by Arkael-Dev
-
-#AIAgent #Termux #Android #OpenSource
+- `--provider gemini --model gemini-2.5-flash` answers normally, including the
+  `run_bash` tool loop.
+- A retired model id now produces a readable error instead of a blank one.
+- `bash -n` clean; `tests/test-stream-live.sh` and `tests/test-stream-parser.sh` pass.
