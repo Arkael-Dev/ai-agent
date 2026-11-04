@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Custom AI accepted anything as the endpoint URL.** A model name typed at the
+  `Endpoint URL` prompt (e.g. `Atria-Dawn`) was saved and ended in
+  `curl: (6) Could not resolve host`. The prompt now only accepts `http(s)://` URLs and
+  re-asks otherwise; `q` cancels. A base URL such as `https://host/v1` is completed to
+  `.../chat/completions`.
+- **Empty model was allowed**, giving `HTTP 400: Missing model` on every message. Pressing
+  Enter with no model now asks again, and `[s] save anyway` refuses to save an empty model
+  or a `Missing model` / 403 / 404 rejection.
+- **Typing a list number at the `type an id` prompt** (e.g. `9`) was taken as the model id
+  `9`. It now explains that it is a list number and points to `l`.
+- **`model_not_allowed` hint.** When a gateway rejects the model for your key, the check
+  now says so and tells you to pick another id with `m`.
+
 ## 1.1.2
 
 Focus: Gemini 3.x tool calls work again.

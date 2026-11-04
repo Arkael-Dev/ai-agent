@@ -267,12 +267,26 @@ read_key() {
     done
 }
 
-ask_custom_url() {
+ask_custom_url() {   # asks until it gets a real http(s) URL; q = cancel
     local u
-    read -r -p "Endpoint URL (full .../chat/completions) [${CUSTOM_URL:-none}]: " u || return 1
-    u="${u//[$'\n\r\t ']/}"
-    [ -n "$u" ] && CUSTOM_URL="$u"
-    [ -z "$CUSTOM_URL" ] && { echo "  A URL is required for the custom provider."; return 1; }
+    while :; do
+        read -r -p "Endpoint URL, e.g. https://host/v1/chat/completions [${CUSTOM_URL:-none}] (q = cancel): " u || return 1
+        INTERRUPTED=0
+        u="${u//[$'\n\r\t ']/}"
+        case "$u" in
+            q|Q) return 1 ;;
+            "")  [ -n "$CUSTOM_URL" ] && break
+                 echo "  A URL is required for the custom provider." ;;
+            http://*|https://*)
+                 u="${u%/}"
+                 case "$u" in
+                     */chat/completions) ;;
+                     *) u="$u/chat/completions"; echo "  Using $u" ;;
+                 esac
+                 CUSTOM_URL="$u"; break ;;
+            *)   echo "  That is not a URL (it must start with https://). A model name goes in the next step." ;;
+        esac
+    done
     API_URL="$CUSTOM_URL"
 }
 
@@ -307,7 +321,8 @@ pick_from_list() {   # numbered, paged list; sets MODEL
         INTERRUPTED=0
         ans="${ans//[$'\n\r\t ']/}"
         case "$ans" in
-            "")  return 0 ;;
+            "")  [ -n "$MODEL" ] && return 0
+                 echo "  No model chosen yet — enter a number or type an id." ;;
             n|N) page=$(( (page + 1) % pages )) ;;
             p|P) page=$(( (page + pages - 1) % pages )) ;;
             *[!0-9]*) MODEL="$ans"; return 0 ;;          # typed a model id
@@ -331,9 +346,11 @@ choose_model() {
         INTERRUPTED=0
         ans="${ans//[$'\n\r\t ']/}"
         case "$ans" in
-            "")  return 0 ;;
+            "")  [ -n "$MODEL" ] && return 0
+                 echo "  A model is required — type its id, or l = list." ;;
             l|L) if fetch_models; then pick_from_list; return 0; else echo "  Could not load the model list."; fi ;;
-            *)   MODEL="$ans"; return 0 ;;
+            *[!0-9]*) MODEL="$ans"; return 0 ;;
+            *)   echo "  \"$ans\" is a list number, not a model id. Press l for the list, or type the full id." ;;
         esac
     done
 }
@@ -369,9 +386,19 @@ verify_and_save() {
             return 0
         fi
         echo "${C_ERR}Check failed: $VERIFY_ERR${C_RST}"
+        if printf '%s' "$VERIFY_ERR" | grep -Eqi "model_not_allowed|not permitted"; then
+            echo "  Your key is not allowed to use '$MODEL'. Press m and type another id"
+            echo "  (check your provider's model list or usage page for the ids your key can use)."
+        fi
         read -r -p "[k] change key  [m] change model  [s] save anyway  [Enter] cancel: " ans || ans=""
         INTERRUPTED=0
-case "$ans" in s|S) if printf "%s" "$VERIFY_ERR" | grep -Eqi "HTTP 40[34]|\[40[34]\]|model_not_allowed|not permitted|no longer available"; then echo "  Not saving: model/key was rejected. Use [m] or [k]."; continue; fi ;; esac
+        case "$ans" in
+            s|S)
+                if [ -z "$MODEL" ]; then echo "  Not saving: no model set. Use [m]."; continue; fi
+                if printf '%s' "$VERIFY_ERR" | grep -Eqi "HTTP 40[34]|\[40[34]\]|missing model|model_not_allowed|not permitted|no longer available"; then
+                    echo "  Not saving: model/key was rejected. Use [m] or [k]."; continue
+                fi ;;
+        esac
         case "$ans" in
             k|K) [ "$PROVIDER" != ollama ] && read_key ;;
             m|M) choose_model list ;;
