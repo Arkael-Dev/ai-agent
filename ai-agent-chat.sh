@@ -427,7 +427,7 @@ main_menu() {
             printf '  %d) %-11s %-22s %s%s\n' "$i" "$(provider_label "$p")" "$st" "${m:-—}" "$cur"
         done
         echo "  Enter = $([ "$mode" = start ] && echo start || echo back) with $(provider_label "$PROVIDER") · $MODEL"
-        echo "  m = choose model   k = change API key   q = $([ "$mode" = start ] && echo quit || echo back)"
+        echo "  m = choose model   k = change API key   r = reset   q = $([ "$mode" = start ] && echo quit || echo back)"
         read -r -p "› " ans || { echo; return 1; }
         INTERRUPTED=0
         ans="${ans//[$'\n\r\t ']/}"
