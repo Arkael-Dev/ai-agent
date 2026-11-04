@@ -67,7 +67,7 @@ key_shape_warn() {   # $1=provider $2=key -> prints a reason when the key looks 
                 sk-or-*) echo "that is an OpenRouter key (sk-or-v1-…), not a Gemini key (AIza…)"; return 0 ;;
                 gsk_*)   echo "that is a Groq key (gsk_…), not a Gemini key (AIza…)"; return 0 ;;
                 sk-*)    echo "that looks like a DeepSeek/OpenAI key (sk-…), not a Gemini key (AIza…)" ; return 0 ;;
-                *) echo "a Gemini key normally starts with AIza" ; return 0 ;;
+                *) return 0 ;;
             esac ;;
         claude)
             case "$k" in
@@ -437,7 +437,7 @@ stream_finalize() {
       {role:"assistant"}
       + (if (.content | length) > 0 then {content:.content} else {} end)
       + (if (.tools | length) > 0 then
-           {tool_calls: [ .tools | to_entries[] | .value
+           {tool_calls: [ .tools | to_entries | sort_by(.key|tonumber)[] | .value
               | {id:(.id // ""), type:"function",
                  function:{name:(.name // ""), arguments:(.arguments // "")}}
               + (if .extra != null then {extra_content:.extra} else {} end) ]}
