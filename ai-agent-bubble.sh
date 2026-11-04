@@ -57,6 +57,39 @@ api_err_msg() {   # short human message from an API error body on stdin (object 
            else (.error | m(.)) // m(.) end' 2>/dev/null | tr '\n' ' ' | cut -c1-300
 }
 
+key_shape_warn() {   # $1=provider $2=key -> prints a reason when the key looks like another provider's
+    local p="$1" k="$2"
+    case "$p" in
+        gemini)
+            case "$k" in
+                AIza*) return 0 ;;
+                sk-ant*) echo "that is a Claude key (sk-ant-…), not a Gemini key (AIza…)"; return 0 ;;
+                sk-or-*) echo "that is an OpenRouter key (sk-or-v1-…), not a Gemini key (AIza…)"; return 0 ;;
+                gsk_*)   echo "that is a Groq key (gsk_…), not a Gemini key (AIza…)"; return 0 ;;
+                sk-*)    echo "that looks like a DeepSeek/OpenAI key (sk-…), not a Gemini key (AIza…)" ; return 0 ;;
+                *) echo "a Gemini key normally starts with AIza" ; return 0 ;;
+            esac ;;
+        claude)
+            case "$k" in
+                sk-ant*) return 0 ;;
+                AIza*)  echo "that is a Gemini key (AIza…), not a Claude key (sk-ant-…)"; return 0 ;;
+                *) echo "a Claude key normally starts with sk-ant-" ; return 0 ;;
+            esac ;;
+        openrouter)
+            case "$k" in
+                sk-or-*) return 0 ;;
+                *) echo "an OpenRouter key normally starts with sk-or-v1-" ; return 0 ;;
+            esac ;;
+        groq)
+            case "$k" in
+                gsk_*) return 0 ;;
+                *) echo "a Groq key normally starts with gsk_" ; return 0 ;;
+            esac ;;
+        deepseek|openai) return 0 ;;
+        *) return 0 ;;
+    esac
+}
+
 provider_url() {
     case "$1" in
         deepseek)   echo "https://api.deepseek.com/chat/completions" ;;
@@ -1042,6 +1075,8 @@ save_key() {
     [ -z "$m" ] && { toast "Enter a model id"; return; }
     [ -z "$k" ] && k="$API_KEY"          # empty field = keep the saved key
     [ -z "$k" ] && { toast "Enter a key first"; return; }
+    local w; w="$(key_shape_warn "$PROVIDER" "$k")"
+    [ -n "$w" ] && { toast "Wrong key for $PROVIDER_LABEL: $w"; return; }
     API_KEY="$k"; ACTIVE_MODEL="$m"
     toast "Checking…"
     busy_begin

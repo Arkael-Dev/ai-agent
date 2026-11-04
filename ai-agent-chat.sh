@@ -218,8 +218,41 @@ trap 'INTERRUPTED=1' INT
 MODEL_LIST=(); MODEL_LIST_FOR=""; VERIFY_ERR=""
 
 # read_key: hidden prompt. Sets API_KEY. Returns 1 if the user cancelled.
+key_shape_warn() {   # $1=provider $2=key -> prints a reason when the key looks like another provider's
+    local p="$1" k="$2"
+    case "$p" in
+        gemini)
+            case "$k" in
+                AIza*) return 0 ;;
+                sk-ant*) echo "that is a Claude key (sk-ant-…), not a Gemini key (AIza…)"; return 0 ;;
+                sk-or-*) echo "that is an OpenRouter key (sk-or-v1-…), not a Gemini key (AIza…)"; return 0 ;;
+                gsk_*)   echo "that is a Groq key (gsk_…), not a Gemini key (AIza…)"; return 0 ;;
+                sk-*)    echo "that looks like a DeepSeek/OpenAI key (sk-…), not a Gemini key (AIza…)" ; return 0 ;;
+                *) echo "a Gemini key normally starts with AIza" ; return 0 ;;
+            esac ;;
+        claude)
+            case "$k" in
+                sk-ant*) return 0 ;;
+                AIza*)  echo "that is a Gemini key (AIza…), not a Claude key (sk-ant-…)"; return 0 ;;
+                *) echo "a Claude key normally starts with sk-ant-" ; return 0 ;;
+            esac ;;
+        openrouter)
+            case "$k" in
+                sk-or-*) return 0 ;;
+                *) echo "an OpenRouter key normally starts with sk-or-v1-" ; return 0 ;;
+            esac ;;
+        groq)
+            case "$k" in
+                gsk_*) return 0 ;;
+                *) echo "a Groq key normally starts with gsk_" ; return 0 ;;
+            esac ;;
+        deepseek|openai) return 0 ;;
+        *) return 0 ;;
+    esac
+}
+
 read_key() {
-    local k hint=""
+    local k hint="" w
     [ -n "$API_KEY" ] && hint=" [saved …${API_KEY: -4}, Enter = keep]"
     while :; do
         read -r -s -p "$(provider_label "$PROVIDER") API key${hint} (hidden, q = cancel): " k || { echo; return 1; }
@@ -230,7 +263,14 @@ read_key() {
             "")  [ -n "$API_KEY" ] && return 0
                  echo "  An API key is required for this provider." ;;
             q|Q) return 1 ;;
-            *)   API_KEY="$k"; echo "  received ${#k} characters"; return 0 ;;
+            *)   w="$(key_shape_warn "$PROVIDER" "$k")"
+                 if [ -n "$w" ]; then
+                     echo "  Warning: $w"
+                     read -r -p "  Use this key anyway? [y/N]: " yn || yn=""
+                     INTERRUPTED=0
+                     case "$yn" in y|Y) ;; *) continue ;; esac
+                 fi
+                 API_KEY="$k"; echo "  received ${#k} characters"; return 0 ;;
         esac
     done
 }
@@ -342,7 +382,11 @@ verify_and_save() {
         case "$ans" in
             k|K) [ "$PROVIDER" != ollama ] && read_key ;;
             m|M) choose_model list ;;
-            s|S) save_config; echo "Saved without a successful check."; return 0 ;;
+            s|S) if [ -n "$(key_shape_warn "$PROVIDER" "$API_KEY")" ]; then
+                     echo "  Not saving: $(key_shape_warn "$PROVIDER" "$API_KEY")."
+                     continue
+                 fi
+                 save_config; echo "Saved without a successful check."; return 0 ;;
             *)   return 1 ;;
         esac
     done
