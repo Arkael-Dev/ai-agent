@@ -215,7 +215,7 @@ INTERRUPTED=0
 trap 'INTERRUPTED=1' INT
 
 # ── Setup helpers: key, model list, verification, menu ───────────────────────
-MODEL_LIST=(); MODEL_LIST_FOR=""; VERIFY_ERR=""
+MODEL_LIST=(); MODEL_LIST_FOR=""; VERIFY_ERR=""; MODELS_ERR=""
 
 # read_key: hidden prompt. Sets API_KEY. Returns 1 if the user cancelled.
 key_shape_warn() {   # $1=provider $2=key -> prints a reason when the key looks like another provider's
@@ -291,16 +291,25 @@ ask_custom_url() {   # asks until it gets a real http(s) URL; q = cancel
 }
 
 fetch_models() {   # fills MODEL_LIST from the provider's /models endpoint
-    local url list hdr=()
+    local url list="" hdr=() code
+    MODELS_ERR=""
     [ "$MODEL_LIST_FOR" = "$PROVIDER" ] && [ "${#MODEL_LIST[@]}" -gt 0 ] && return 0
     url="${API_URL%/chat/completions}/models"
     hdr=(-H "Authorization: Bearer $API_KEY")
     [ "$PROVIDER" = claude ] && hdr+=(-H "x-api-key: $API_KEY" -H "anthropic-version: 2023-06-01")
-    list="$(timeout 20 curl -sS --max-time 15 "${hdr[@]}" "$url" 2>/dev/null \
-        | jq -r '(.data // .models // [])[] | (.id // .name // empty)' 2>/dev/null \
+    : >"$TMP/models.json"
+    code="$(timeout 20 curl -sS --max-time 15 -o "$TMP/models.json" -w '%{http_code}' "${hdr[@]}" "$url" 2>"$TMP/models.err")"
+    if [ -z "$code" ] || [ "$code" = 000 ]; then
+        MODELS_ERR="$(head -c 120 "$TMP/models.err" | tr -d '\n')"; [ -z "$MODELS_ERR" ] && MODELS_ERR="no response"
+    elif [ "$code" -ge 400 ] 2>/dev/null; then
+        MODELS_ERR="HTTP $code: $(api_err_msg <"$TMP/models.json" | head -c 120 | tr -d "\n" | sed "s/ *$//")"
+    else
+        list="$(jq -r '(.data // .models // [])[] | (.id // .name // empty)' "$TMP/models.json" 2>/dev/null \
         | sed 's#^models/##' \
         | grep -viE 'embed|whisper|tts|dall-e|moderation|transcribe|realtime|audio|image|guard|deep-research|computer-use|robotics|antigravity|live|lyria|nano-banana|omni|aqa|gemma' \
         | sort -u)"
+        [ -z "$list" ] && MODELS_ERR="the server returned no models"
+    fi
     list="$( { provider_presets "$PROVIDER"; printf '%s\n' "$list"; } | awk 'NF && !seen[$0]++')"
     [ -z "$list" ] && return 1
     mapfile -t MODEL_LIST <<<"$list"
@@ -317,12 +326,13 @@ pick_from_list() {   # numbered, paged list; sets MODEL
             mark=" "; [ "${MODEL_LIST[$i]}" = "$MODEL" ] && mark="*"
             printf ' %s%3d) %s\n' "$mark" "$((i+1))" "${MODEL_LIST[$i]}"
         done
-        read -r -p "Number or id · n = next · p = prev · Enter = keep [$MODEL]: " ans || return 0
+        read -r -p "Number or id · n = next · p = prev · q = cancel · Enter = keep [$MODEL]: " ans || return 1
         INTERRUPTED=0
         ans="${ans//[$'\n\r\t ']/}"
         case "$ans" in
             "")  [ -n "$MODEL" ] && return 0
                  echo "  No model chosen yet — enter a number or type an id." ;;
+            q|Q) return 1 ;;
             n|N) page=$(( (page + 1) % pages )) ;;
             p|P) page=$(( (page + pages - 1) % pages )) ;;
             *[!0-9]*) MODEL="$ans"; return 0 ;;          # typed a model id
@@ -338,17 +348,18 @@ choose_model() {
     local ans mode="${1:-}"
     if [ "$mode" = list ]; then
         echo "Loading models…"
-        if fetch_models; then pick_from_list; return 0; fi
-        echo "  Could not load the model list — type the model id instead."
+        if fetch_models; then pick_from_list; return; fi
+        echo "  Could not load the model list${MODELS_ERR:+ ($MODELS_ERR)} — type the model id instead."
     fi
     while :; do
-        read -r -p "Model [$MODEL] — Enter = keep, l = list, or type an id: " ans || return 0
+        read -r -p "Model [$MODEL] — Enter = keep, l = list, q = cancel, or type an id: " ans || return 1
         INTERRUPTED=0
         ans="${ans//[$'\n\r\t ']/}"
         case "$ans" in
             "")  [ -n "$MODEL" ] && return 0
                  echo "  A model is required — type its id, or l = list." ;;
-            l|L) if fetch_models; then pick_from_list; return 0; else echo "  Could not load the model list."; fi ;;
+            q|Q) return 1 ;;
+            l|L) if fetch_models; then pick_from_list; return; else echo "  Could not load the model list${MODELS_ERR:+ ($MODELS_ERR)}."; fi ;;
             *[!0-9]*) MODEL="$ans"; return 0 ;;
             *)   echo "  \"$ans\" is a list number, not a model id. Press l for the list, or type the full id." ;;
         esac
@@ -401,7 +412,7 @@ verify_and_save() {
         esac
         case "$ans" in
             k|K) [ "$PROVIDER" != ollama ] && read_key ;;
-            m|M) choose_model list ;;
+            m|M) choose_model list || return 1 ;;
             s|S) if [ -n "$(key_shape_warn "$PROVIDER" "$API_KEY")" ]; then
                      echo "  Not saving: $(key_shape_warn "$PROVIDER" "$API_KEY")."
                      continue
@@ -420,7 +431,7 @@ setup_provider() {
     MODEL_LIST=(); MODEL_LIST_FOR=""
     if [ "$p" = custom ]; then ask_custom_url || { restore; return 1; }; fi
     if [ "$p" != ollama ]; then read_key || { restore; return 1; }; fi
-    choose_model list
+    choose_model list || { restore; return 1; }
     verify_and_save || { restore; return 1; }
 }
 
@@ -478,7 +489,7 @@ main_menu() {
             q|Q) [ "$mode" = start ] && return 1; return 0 ;;
             m|M)
                 if [ "$PROVIDER" != ollama ] && [ -z "$API_KEY" ]; then echo "  Add an API key first (k)."; continue; fi
-                o_m="$MODEL"; choose_model list
+                o_m="$MODEL"; choose_model list || { echo "  Cancelled."; continue; }
                 [ "$MODEL" != "$o_m" ] && { verify_and_save || MODEL="$o_m"; } ;;
             k|K)
                 if [ "$PROVIDER" = ollama ]; then echo "  Ollama is local — no key needed."; continue; fi
@@ -724,7 +735,7 @@ while :; do
             read_key && verify_and_save || API_KEY="$o_k"
             continue ;;
         /models)
-            o_m="$MODEL"; choose_model list
+            o_m="$MODEL"; choose_model list || { echo "  Cancelled."; continue; }
             [ "$MODEL" != "$o_m" ] && { verify_and_save || MODEL="$o_m"; }
             echo "${C_ACC}⚡ $(provider_label "$PROVIDER")${C_RST} · $MODEL"; continue ;;
         /help)

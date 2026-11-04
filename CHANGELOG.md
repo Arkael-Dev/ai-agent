@@ -14,6 +14,11 @@
   or a `Missing model` / 403 / 404 rejection.
 - **Typing a list number at the `type an id` prompt** (e.g. `9`) was taken as the model id
   `9`. It now explains that it is a list number and points to `l`.
+- **`q` at a model prompt was taken as the model id `q`** (then `404: No active credentials
+  for provider: openai`). `q` now cancels the model prompt and the list, leaving the
+  previous model untouched.
+- **Model list failures were silent.** `Could not load the model list` now shows the
+  reason (for example `HTTP 403: rate limited` or a network error).
 - **`model_not_allowed` hint.** When a gateway rejects the model for your key, the check
   now says so and tells you to pick another id with `m`.
 
