@@ -9,9 +9,10 @@ ok()  { echo "ok   - $1"; }
 bad() { echo "FAIL - $1"; fail=1; }
 
 # the chat and the bubble must carry identical helpers
-FUNCS='/^hist_repair() {/,/^}/p;/^hist_unfinished() {/,/^}/p;/^is_continue_cmd() {/,/^}/p'
+FUNCS='/^hist_repair() {/,/^}/p;/^hist_unfinished() {/,/^}/p;/^is_continue_cmd() {/,/^}/p;/^repeat_fail_hint() {/,/^}/p'
 [ "$(sed -n "$FUNCS" "$SRC")" = "$(sed -n "$FUNCS" "$DIR/ai-agent-bubble.sh")" ] && ok "chat and bubble helpers match" || bad "chat and bubble helpers match"
 
+declare -A FAIL_COUNT=()
 # load only the helper functions from the chat script
 eval "$(sed -n "$FUNCS" "$SRC")"
 
@@ -37,5 +38,11 @@ done
 for p in "buatkan script backup" "apa itu bash" "list files in downloads"; do
     is_continue_cmd "$p" && bad "not continue: $p" || ok "not continue: $p"
 done
+
+# 5) the same failing command gets a hint on the 2nd failure; success clears it
+repeat_fail_hint "touch /x/y" 1 "exit=1"; case "$TOOL_OUT" in *hint*) bad "no hint on 1st failure";; *) ok "no hint on 1st failure";; esac
+repeat_fail_hint "touch /x/y" 1 "exit=1"; case "$TOOL_OUT" in *"failed 2 times"*) ok "hint on 2nd failure";; *) bad "hint on 2nd failure";; esac
+repeat_fail_hint "touch /x/y" 0 "exit=0"; case "$TOOL_OUT" in *hint*) bad "success clears";; *) ok "success clears";; esac
+repeat_fail_hint "touch /x/y" 1 "exit=1"; case "$TOOL_OUT" in *hint*) bad "count reset after success";; *) ok "count reset after success";; esac
 
 exit $fail

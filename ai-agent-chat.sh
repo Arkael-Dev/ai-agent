@@ -143,7 +143,11 @@ RISKY_PATTERN='(^|[;&|(]|&&|\|\|)[[:space:]]*(rm|rmdir|shred|mkfs|dd|truncate|mv
 
 SYSTEM_PROMPT="You are a helpful assistant in the user's Termux terminal on an Android phone (Bionic libc, no sudo/root). You can run bash commands on the device with the run_bash tool to inspect files, run programs, fetch things, and get tasks done. Prefer doing the work with tools over describing it. Keep answers concise and readable on a small screen.
 
-Continuing work: the conversation can be cut off at any time (Termux closed or killed, timeout, network error). When the user says anything like \"lanjut\", \"lanjutin\", \"terusin\", \"continue\", \"resume\" or \"go on\", or a note says the previous run was interrupted, resume the last unfinished task immediately. Read the conversation above to find what it was, check the current state with a quick command if needed (ls, cat, git status), skip steps that are already done, and carry on until it is finished. NEVER answer with a question like \"continue what?\" or \"which task?\" — the unfinished task is in the history. Only ask when there is truly no earlier task anywhere in the conversation."
+Continuing work: the conversation can be cut off at any time (Termux closed or killed, timeout, network error). When the user says anything like \"lanjut\", \"lanjutin\", \"terusin\", \"continue\", \"resume\" or \"go on\", or a note says the previous run was interrupted, resume the last unfinished task immediately. Read the conversation above to find what it was, check the current state with a quick command if needed (ls, cat, git status), skip steps that are already done, and carry on until it is finished. NEVER answer with a question like \"continue what?\" or \"which task?\" — the unfinished task is in the history. Only ask when there is truly no earlier task anywhere in the conversation.
+
+Android storage: /storage/emulated/0 is the phone's shared storage (Download, Alarms, DCIM, Documents and so on). In Termux the same folder is also reachable as ~/storage/shared, which needs the one-time command termux-setup-storage. When the user gives a path like /storage/emulated/0/Alarms/file.txt, use it exactly as given and do not ask what it means. Create the parent folder with mkdir -p, write the file, then confirm with ls -l and cat. If it fails with Permission denied or No such file, run one check: ls -ld /storage/emulated/0 ~/storage/shared. If storage permission is missing, tell the user to run termux-setup-storage and allow access, then retry using ~/storage/shared/... instead. If the file name looks like a typo (for example bacat.xt), use it as typed and mention it in one short line.
+
+When a command fails: read the error, never repeat the same command that just failed, make one quick check to find the cause, then change the approach. Write a file with a single command (printf with single quotes, or cat with a quoted EOF), not many small ones. If two different approaches fail, stop, show the exact error and say what the user must do, instead of looping."
 TOOLS='[{"type":"function","function":{"name":"run_bash","description":"Run a bash command on the Android/Termux device and return combined stdout+stderr plus the exit code.","parameters":{"type":"object","properties":{"command":{"type":"string","description":"The bash command to run."}},"required":["command"]}}}]'
 
 PROVIDER="${AI_PROVIDER:-deepseek}"
@@ -675,6 +679,17 @@ api_call() {   # $1 = body -> MSG (assistant message). 0 ok, 1 error, 2 interrup
 
 # ── Tool: run_bash ───────────────────────────────────────────────────────────
 TOOL_OUT=""
+# Same command failing again and again? Say so in the tool result so the model changes approach.
+declare -A FAIL_COUNT=()
+repeat_fail_hint() {   # $1 = command, $2 = exit code, $3 = tool output -> sets TOOL_OUT (adds a hint when it keeps failing)
+    local k; k="$(printf '%s' "$1" | cksum | cut -d' ' -f1)"
+    TOOL_OUT="$3"
+    if [ "$2" = 0 ]; then unset 'FAIL_COUNT[$k]'; return 0; fi
+    FAIL_COUNT[$k]=$(( ${FAIL_COUNT[$k]:-0} + 1 ))
+    [ "${FAIL_COUNT[$k]}" -ge 2 ] && TOOL_OUT+=$'\n'"[hint: this exact command has now failed ${FAIL_COUNT[$k]} times. Do NOT run it again. Diagnose the cause (permission, path, quoting) or tell the user what is blocking it.]"
+    return 0
+}
+
 run_bash_tool() {   # $1 = command -> TOOL_OUT
     local cmd="$1" of="$TMP/tool.out" ec out ans
     mkdir -p "$CONFIG_DIR" 2>/dev/null
@@ -688,7 +703,7 @@ run_bash_tool() {   # $1 = command -> TOOL_OUT
     if [ "$INTERRUPTED" = 1 ]; then TOOL_OUT="exit=130"$'\n'"(stopped by user)"; return; fi
     out="exit=$ec"$'\n'"$(cat "$of" 2>/dev/null)"
     [ ${#out} -gt "$OUT_LIMIT" ] && out="${out:0:$OUT_LIMIT}"$'\n...[truncated]'
-    TOOL_OUT="$out"
+    repeat_fail_hint "$cmd" "$ec" "$out"
 }
 
 # ── Agent loop ───────────────────────────────────────────────────────────────

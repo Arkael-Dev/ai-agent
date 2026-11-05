@@ -4,6 +4,12 @@
 
 ### Fixed
 
+- **The AI looped on a failing file write** (for example to `/storage/emulated/0/Alarms/...`),
+  retrying the same command over and over. The system prompt now explains Android shared
+  storage (`/storage/emulated/0` = `~/storage/shared`, needs `termux-setup-storage`), tells
+  the model to diagnose once and change approach, and a command that fails twice gets a
+  "do not run it again" hint in its result (chat and bubble).
+
 - **A cut-off task could not be resumed; saying "lanjut" made the AI ask "continue what?".**
   - The chat saved its history only when a run finished, so closing or losing Termux in the
     middle of a task lost the request and everything done so far. History is now saved after
