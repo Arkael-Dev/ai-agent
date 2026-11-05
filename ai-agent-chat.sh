@@ -137,7 +137,7 @@ CONFIG_FILE="$CONFIG_DIR/config"
 HIST_FILE="$CONFIG_DIR/history-cli.json"   # separate from the bubble's history
 CMD_LOG="$CONFIG_DIR/cmd.log"
 MAX_TOKENS=8000; THINKING=off; CONFIRM_DANGEROUS=0
-MAX_ITERS="${AI_MAX_ITERS:-40}"; MAX_RUN_SECONDS="${AI_MAX_RUN_SECONDS:-1200}"; CMD_TIMEOUT=120; OUT_LIMIT=10000; HIST_LIMIT=60000; HIST_HARD_LIMIT=240000
+MAX_ITERS="${AI_MAX_ITERS:-500}"; MAX_RUN_SECONDS="${AI_MAX_RUN_SECONDS:-3600}"; CMD_TIMEOUT=120; OUT_LIMIT=10000; HIST_LIMIT=60000; HIST_HARD_LIMIT=240000
 HTTP_RETRIES=2
 RISKY_PATTERN='(^|[;&|(]|&&|\|\|)[[:space:]]*(rm|rmdir|shred|mkfs|dd|truncate|mv|chmod|chown|pm[[:space:]]+(un)?install|am[[:space:]]+force-stop|settings[[:space:]]+put|reboot|svc[[:space:]]|cmd[[:space:]]|termux-clipboard-set)'
 
