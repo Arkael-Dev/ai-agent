@@ -141,7 +141,9 @@ MAX_ITERS=25; CMD_TIMEOUT=120; OUT_LIMIT=10000; HIST_LIMIT=60000; HIST_HARD_LIMI
 HTTP_RETRIES=2
 RISKY_PATTERN='(^|[;&|(]|&&|\|\|)[[:space:]]*(rm|rmdir|shred|mkfs|dd|truncate|mv|chmod|chown|pm[[:space:]]+(un)?install|am[[:space:]]+force-stop|settings[[:space:]]+put|reboot|svc[[:space:]]|cmd[[:space:]]|termux-clipboard-set)'
 
-SYSTEM_PROMPT="You are a helpful assistant in the user's Termux terminal on an Android phone (Bionic libc, no sudo/root). You can run bash commands on the device with the run_bash tool to inspect files, run programs, fetch things, and get tasks done. Prefer doing the work with tools over describing it. Keep answers concise and readable on a small screen."
+SYSTEM_PROMPT="You are a helpful assistant in the user's Termux terminal on an Android phone (Bionic libc, no sudo/root). You can run bash commands on the device with the run_bash tool to inspect files, run programs, fetch things, and get tasks done. Prefer doing the work with tools over describing it. Keep answers concise and readable on a small screen.
+
+Continuing work: the conversation can be cut off at any time (Termux closed or killed, timeout, network error). When the user says anything like \"lanjut\", \"lanjutin\", \"terusin\", \"continue\", \"resume\" or \"go on\", or a note says the previous run was interrupted, resume the last unfinished task immediately. Read the conversation above to find what it was, check the current state with a quick command if needed (ls, cat, git status), skip steps that are already done, and carry on until it is finished. NEVER answer with a question like \"continue what?\" or \"which task?\" — the unfinished task is in the history. Only ask when there is truly no earlier task anywhere in the conversation."
 TOOLS='[{"type":"function","function":{"name":"run_bash","description":"Run a bash command on the Android/Termux device and return combined stdout+stderr plus the exit code.","parameters":{"type":"object","properties":{"command":{"type":"string","description":"The bash command to run."}},"required":["command"]}}}]'
 
 PROVIDER="${AI_PROVIDER:-deepseek}"
@@ -535,7 +537,10 @@ hist_load() {
     [ -s "$HIST_FILE" ] || return 0
     local h; h="$(cat "$HIST_FILE" 2>/dev/null)"
     jq -e 'type == "array" and length > 1' >/dev/null 2>&1 <<<"$h" || return 0
-    HISTORY="$h"
+    HISTORY="$(hist_repair <<<"$h" 2>/dev/null)"
+    [ -n "$HISTORY" ] || HISTORY="$h"
+    # old saved sessions carry the old system prompt; use the current one
+    HISTORY="$(jq -c --arg s "$SYSTEM_PROMPT" 'if .[0].role == "system" then .[0].content = $s else . end' <<<"$HISTORY" 2>/dev/null || printf '%s' "$HISTORY")"
 }
 trim_history() {
     local limit="$1"
@@ -546,7 +551,37 @@ trim_history() {
         done
     done
 }
-hist_add() { HISTORY="$(jq -c --argjson m "$1" '. + [$m]' <<<"$HISTORY")"; }
+# every message is saved as soon as it exists, so a session that dies mid-task
+# (Termux killed, phone locked, connection lost) still has the request and the progress
+hist_add() { HISTORY="$(jq -c --argjson m "$1" '. + [$m]' <<<"$HISTORY")"; hist_save; }
+
+# A run that was cut off can leave tool calls without a reply, which the API rejects.
+# Give every dangling call a reply that says it was interrupted.
+hist_repair() {   # messages array on stdin -> repaired array on stdout
+    jq -c '
+      def synth($ids): $ids | map({role:"tool", tool_call_id:., content:"exit=130\n(interrupted: the session was cut off before this command finished, so its result is unknown. Check the current state before repeating it.)"});
+      reduce .[] as $m ({out:[], pending:[]};
+        if $m.role == "tool" then .out += [$m] | .pending -= [$m.tool_call_id]
+        else
+          (if (.pending | length) > 0 then .out += synth(.pending) | .pending = [] else . end)
+          | .out += [$m]
+          | (if $m.role == "assistant" then .pending = (($m.tool_calls // []) | map(.id)) else . end)
+        end)
+      | if (.pending | length) > 0 then .out + synth(.pending) else .out end'
+}
+
+# true when the last run never produced a final answer (history ends on the user's
+# request or on a tool result)
+hist_unfinished() {
+    jq -e 'length > 1 and (.[-1].role == "user" or .[-1].role == "tool")' >/dev/null 2>&1 <<<"$HISTORY"
+}
+
+# does this look like "keep going" (lanjut, terusin, continue, ...)? short messages only
+is_continue_cmd() {
+    local t="${1,,}"
+    [ ${#t} -le 40 ] || return 1
+    printf '%s' "$t" | grep -Eq '(^|[^[:alnum:]])(lanjut[a-z]*|terus(in|kan)?|continue|resume|proceed|keep going|go on|selesaikan|sambung[a-z]*|gas)([^[:alnum:]]|$)'
+}
 
 # ── API (streaming) ──────────────────────────────────────────────────────────
 json_body() {   # messages array on stdin
@@ -663,10 +698,20 @@ agent() {   # $1 = user text
         HISTORY="$(jq -nc --arg s "$SYSTEM_PROMPT" '[{role:"system",content:$s}]')"
     fi
     trim_history "$HIST_LIMIT"
+    HISTORY="$(hist_repair <<<"$HISTORY" 2>/dev/null || printf '%s' "$HISTORY")"
+    # tell the model when this message means "carry on with the unfinished task"
+    local note=""
+    if hist_unfinished; then
+        note="[Note from the app, not typed by the user: the previous run was cut off before it finished (session closed, Termux killed, timeout or network error). The user's last request and your progress so far are in the conversation above. Resume that task right now from where it stopped: check the current state if needed, skip what is already done, and carry on to completion. Do NOT ask what to continue or ask for clarification; the unfinished task above is the answer.]"
+    elif is_continue_cmd "$user"; then
+        note="[Note from the app, not typed by the user: the user wants you to keep going. Continue the most recent task, or its next logical step, from the conversation above without asking what to continue. Only ask if there is truly no earlier task.]"
+    fi
+    [ -n "$note" ] && user="$user"$'\n\n'"$note"
     HISTORY="$(jq -c --arg c "$user" '. + [{role:"user",content:$c}]' <<<"$HISTORY")"
+    hist_save
     INTERRUPTED=0
     for ((i=0; i<MAX_ITERS; i++)); do
-        if [ $((SECONDS - run_start)) -gt 300 ]; then echo "${C_ERR}(stopped: 300s run budget used up)${C_RST}"; break; fi
+        if [ $((SECONDS - run_start)) -gt 300 ]; then echo "${C_ERR}(stopped: 300s run budget used up — type lanjut to continue)${C_RST}"; break; fi
         trim_history "$HIST_HARD_LIMIT"
         body="$(json_body <<<"$HISTORY")"
         printf '%s🤖 %s' "$C_ACC" "$C_RST"
@@ -698,7 +743,7 @@ agent() {   # $1 = user text
         fi
         break
     done
-    [ "$i" -ge "$MAX_ITERS" ] && echo "${C_DIM}(stopped after $MAX_ITERS tool iterations)${C_RST}"
+    [ "$i" -ge "$MAX_ITERS" ] && echo "${C_DIM}(stopped after $MAX_ITERS tool iterations — type lanjut to continue)${C_RST}"
     hist_save
 }
 
@@ -730,6 +775,7 @@ restored=0; [ "$HISTORY" != '[]' ] && restored=$(( $(jq 'length' <<<"$HISTORY") 
 
 echo "${C_ACC}⚡ $(provider_label "$PROVIDER")${C_RST} · $MODEL   ${C_DIM}(/menu to switch AI, /key, /models, /help)${C_RST}"
 [ "$restored" -gt 0 ] && echo "${C_DIM}Restored $restored messages from the last session (/reset to clear).${C_RST}"
+hist_unfinished && echo "${C_ACC}↻${C_RST} ${C_DIM}Last task was cut off. Type ${C_RST}lanjut${C_DIM} to continue it.${C_RST}"
 
 while :; do
     INTERRUPTED=0

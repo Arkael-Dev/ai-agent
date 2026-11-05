@@ -4,6 +4,19 @@
 
 ### Fixed
 
+- **A cut-off task could not be resumed; saying "lanjut" made the AI ask "continue what?".**
+  - The chat saved its history only when a run finished, so closing or losing Termux in the
+    middle of a task lost the request and everything done so far. History is now saved after
+    every message (chat and bubble).
+  - A cut-off run could leave tool calls without a reply, which APIs reject. Dangling calls
+    now get an "interrupted" reply when the history is loaded.
+  - When the last run never finished, or the message is a short "lanjut / terusin /
+    continue / resume", the app adds a hidden note telling the model to resume the unfinished
+    task without asking. The system prompt has the same rule, and old saved sessions pick up
+    the new prompt.
+  - The chat shows `Last task was cut off. Type lanjut to continue it.` on start.
+  - New test: `tests/test-resume.sh`.
+
 - **Custom AI accepted anything as the endpoint URL.** A model name typed at the
   `Endpoint URL` prompt (e.g. `Atria-Dawn`) was saved and ended in
   `curl: (6) Could not resolve host`. The prompt now only accepts `http(s)://` URLs and
