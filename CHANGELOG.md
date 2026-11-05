@@ -4,6 +4,11 @@
 
 ### Fixed
 
+- **`(stopped: 300s run budget used up)` cut tasks off halfway.** Slow models and retries
+  burned the 5-minute cap. The default is now 1200 s and 40 tool steps per run (chat and
+  bubble), adjustable with `AI_MAX_RUN_SECONDS` and `AI_MAX_ITERS`, e.g.
+  `AI_MAX_RUN_SECONDS=3000 ai chat`.
+
 - **The AI looped on a failing file write** (for example to `/storage/emulated/0/Alarms/...`),
   retrying the same command over and over. The system prompt now explains Android shared
   storage (`/storage/emulated/0` = `~/storage/shared`, needs `termux-setup-storage`), tells

@@ -134,10 +134,10 @@ DEFAULT_MODEL="deepseek-flash"   # current DeepSeek id; deepseek-v4-pro is the b
 DEFAULT_MAX_TOKENS=8000
 DEFAULT_THINKING="off"           # off = fastest answers; on = reasoning pass; default = let the server decide
 DEFAULT_CONFIRM_DANGEROUS=0      # 1 = ask before risky shell commands
-MAX_RUN_SECONDS=300              # wall-clock cap for one agent run (all iterations)
+MAX_RUN_SECONDS="${AI_MAX_RUN_SECONDS:-1200}"              # wall-clock cap for one agent run (all iterations)
 HTTP_RETRIES=2                   # retries for 429 / 5xx
 RISKY_PATTERN='(^|[;&|(]|&&|\|\|)[[:space:]]*(rm|rmdir|shred|mkfs|dd|truncate|mv|chmod|chown|pm[[:space:]]+(un)?install|am[[:space:]]+force-stop|settings[[:space:]]+put|reboot|svc[[:space:]]|cmd[[:space:]]|termux-clipboard-set)'
-MAX_ITERS=25            # agent tool-call loop cap
+MAX_ITERS="${AI_MAX_ITERS:-40}"            # agent tool-call loop cap
 CMD_TIMEOUT=120         # per run_bash timeout (seconds)
 OUT_LIMIT=10000         # max chars of tool output fed back to the model
 HIST_LIMIT=60000        # trim conversation history to roughly this many chars between turns

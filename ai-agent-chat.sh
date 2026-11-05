@@ -137,7 +137,7 @@ CONFIG_FILE="$CONFIG_DIR/config"
 HIST_FILE="$CONFIG_DIR/history-cli.json"   # separate from the bubble's history
 CMD_LOG="$CONFIG_DIR/cmd.log"
 MAX_TOKENS=8000; THINKING=off; CONFIRM_DANGEROUS=0
-MAX_ITERS=25; CMD_TIMEOUT=120; OUT_LIMIT=10000; HIST_LIMIT=60000; HIST_HARD_LIMIT=240000
+MAX_ITERS="${AI_MAX_ITERS:-40}"; MAX_RUN_SECONDS="${AI_MAX_RUN_SECONDS:-1200}"; CMD_TIMEOUT=120; OUT_LIMIT=10000; HIST_LIMIT=60000; HIST_HARD_LIMIT=240000
 HTTP_RETRIES=2
 RISKY_PATTERN='(^|[;&|(]|&&|\|\|)[[:space:]]*(rm|rmdir|shred|mkfs|dd|truncate|mv|chmod|chown|pm[[:space:]]+(un)?install|am[[:space:]]+force-stop|settings[[:space:]]+put|reboot|svc[[:space:]]|cmd[[:space:]]|termux-clipboard-set)'
 
@@ -726,7 +726,7 @@ agent() {   # $1 = user text
     hist_save
     INTERRUPTED=0
     for ((i=0; i<MAX_ITERS; i++)); do
-        if [ $((SECONDS - run_start)) -gt 300 ]; then echo "${C_ERR}(stopped: 300s run budget used up — type lanjut to continue)${C_RST}"; break; fi
+        if [ $((SECONDS - run_start)) -gt "$MAX_RUN_SECONDS" ]; then echo "${C_ERR}(stopped: ${MAX_RUN_SECONDS}s run budget used up — type lanjut to continue)${C_RST}"; break; fi
         trim_history "$HIST_HARD_LIMIT"
         body="$(json_body <<<"$HISTORY")"
         printf '%s🤖 %s' "$C_ACC" "$C_RST"
